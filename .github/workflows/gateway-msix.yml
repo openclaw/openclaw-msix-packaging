@@ -166,7 +166,7 @@ jobs:
       - name: Stage and archive payload
         shell: pwsh
         run: |
-          .\packaging\gateway-msix\scripts\Build-Payload.ps1 `
+          .\scripts\Build-Payload.ps1 `
             -PackageDirectory '${{ runner.temp }}\openclaw-package' `
             -Architecture '${{ matrix.architecture }}' `
             -OutputDirectory '${{ runner.temp }}\openclaw-payload'
@@ -214,7 +214,7 @@ jobs:
         shell: pwsh
         run: |
           dotnet restore `
-            .\src\OpenClaw.Gateway.MSIXHost\OpenClaw.Gateway.MSIXHost.csproj `
+            .\src\OpenClaw.Gateway.Launcher\OpenClaw.Gateway.Launcher.csproj `
             --runtime 'win-${{ matrix.architecture }}' `
             -p:PublishAot=true `
             -p:IncludePackagingContent=true `
@@ -227,7 +227,7 @@ jobs:
           $attemptComponent = [int64]::Parse('${{ github.run_attempt }}') % 65536
           $packageVersion = "0.1.$buildComponent.$attemptComponent"
 
-          .\packaging\gateway-msix\scripts\Build-MSIX.ps1 `
+          .\scripts\Build-MSIX.ps1 `
             -PayloadDirectory '${{ runner.temp }}\openclaw-payload' `
             -Architecture '${{ matrix.architecture }}' `
             -NodeVersion '${{ env.NODE_VERSION }}' `
@@ -274,7 +274,7 @@ jobs:
       - name: Apply temporary test signature
         shell: pwsh
         run: |
-          .\packaging\gateway-msix\scripts\Sign-TestMSIX.ps1 `
+          .\scripts\Sign-TestMSIX.ps1 `
             -ArtifactsDirectory artifacts `
             -OutputDirectory test-signed
 
@@ -335,12 +335,15 @@ jobs:
 
       - name: Enforce official signing policy
         shell: pwsh
+        env:
+          OPENCLAW_REF: ${{ inputs.openclaw_ref }}
+          PACKAGING_COMMIT: ${{ github.sha }}
         run: |
-          .\packaging\gateway-msix\scripts\Test-SigningInputs.ps1 `
+          .\scripts\Test-SigningInputs.ps1 `
             -ArtifactsDirectory artifacts `
             -PolicyPath .\release-policy.json `
-            -RequestedRef '${{ inputs.openclaw_ref }}' `
-            -PackagingCommit '${{ github.sha }}'
+            -RequestedRef $env:OPENCLAW_REF `
+            -PackagingCommit $env:PACKAGING_COMMIT
 
   sign-msix:
     name: Officially sign Gateway MSIX packages

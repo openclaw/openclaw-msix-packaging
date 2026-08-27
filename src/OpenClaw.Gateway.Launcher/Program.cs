@@ -1,4 +1,4 @@
-namespace OpenClaw.MSIXHost;
+namespace OpenClaw.Gateway.Launcher;
 
 internal static class Program
 {
@@ -92,31 +92,13 @@ internal static class Program
             }
 
             HostOptions options = HostOptions.Parse(args);
-            bool isBootstrapLaunch = options.OpenClawArguments.Count == 0;
-            bool verifyInstalledPayload = false;
-            if (isBootstrapLaunch)
-            {
-                BootstrapAction action = BootstrapConsole.PromptForAction(
-                    options.InstallDirectory,
-                    Console.In,
-                    Console.Out);
-                verifyInstalledPayload = action == BootstrapAction.PrepareFull;
-            }
-
             var stager = new PayloadStager(
                 options.InstallDirectory,
-                ReportProgress,
-                verifyInstalledPayload);
+                ReportProgress);
             StagedPayload payload = await stager.StageAsync(
                 options.PayloadPath,
                 options.MetadataPath,
                 CancellationToken.None);
-
-            if (isBootstrapLaunch)
-            {
-                BootstrapConsole.WritePreparationSummary(Console.Out, payload);
-                return 0;
-            }
 
             int exitCode = await GatewayLauncher.RunAsync(
                 options.NodePath,
@@ -148,20 +130,6 @@ internal static class Program
         }
         finally
         {
-            if (!Console.IsInputRedirected)
-            {
-                try
-                {
-                    BootstrapConsole.WaitForExit(Console.In, Console.Out);
-                }
-                catch (Exception exception) when (
-                    exception is IOException or ObjectDisposedException)
-                {
-                    WriteDiagnostic(
-                        $"Unable to wait for console input: {exception.GetType().Name}.");
-                }
-            }
-
             WriteDiagnostic("Host exiting.");
             diagnostics?.Dispose();
         }

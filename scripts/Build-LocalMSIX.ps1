@@ -116,7 +116,7 @@ try {
         -FailureMessage 'Locked dependency restore failed.' `
         -Command {
             & dotnet restore `
-                .\src\OpenClaw.Gateway.MSIXHost\OpenClaw.Gateway.MSIXHost.csproj `
+                .\src\OpenClaw.Gateway.Launcher\OpenClaw.Gateway.Launcher.csproj `
                 --runtime "win-$Architecture" `
                 -p:PublishAot=true `
                 -p:IncludePackagingContent=true `

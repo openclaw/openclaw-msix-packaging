@@ -8,7 +8,7 @@
     <Nullable>enable</Nullable>
     <NuGetAuditMode>all</NuGetAuditMode>
     <AssemblyName>openclaw</AssemblyName>
-    <RootNamespace>OpenClaw.MSIXHost</RootNamespace>
+    <RootNamespace>OpenClaw.Gateway.Launcher</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Platforms>x64;arm64</Platforms>
     <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
@@ -51,7 +51,7 @@
       <SubType>Designer</SubType>
     </AppxManifest>
     <Content Include="Images\**\*.png" />
-    <InternalsVisibleTo Include="OpenClaw.Gateway.MSIXHost.Tests" />
+    <InternalsVisibleTo Include="OpenClaw.Gateway.Launcher.Tests" />
   </ItemGroup>
 
   <Target Name="GenerateVersionedAppxManifest"

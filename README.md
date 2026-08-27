@@ -2,7 +2,7 @@
 
 This repository builds a Windows MSIX package containing:
 
-- a .NET 10 NativeAOT bootstrapper exposed as the `openclaw` app execution
+- a .NET 10 NativeAOT launcher exposed as the `openclaw` app execution
   alias;
 - a pinned, verified build of
   [`openclaw/openclaw`](https://github.com/openclaw/openclaw);
@@ -12,30 +12,17 @@ The package is independent from the OpenClaw Companion application and uses a
 separate `OpenClaw.Gateway` package identity. Both packages use the OpenClaw
 Foundation publisher metadata established for OpenClaw's Windows packages.
 
-## Bootstrap behavior
-
-Launching `openclaw` without arguments prepares the bundled gateway under
-`%USERPROFILE%\.openclaw-msix\app`. It does not automatically start the
-gateway. After preparation, use:
-
-```powershell
-openclaw setup --classic --mode local --no-install-daemon
-openclaw gateway run
-```
-
-On later launches, the bootstrapper offers these choices:
-
-- **C**: continue with fast verification (recommended);
-- **R**: fully verify every prepared file and repair if needed.
+## Launcher behavior
 
 When preparation is required, the host extracts into a temporary directory,
 moves any existing prepared payload aside, and promotes the new payload only
 after extraction and verification succeed. The previous payload is removed
 after successful promotion, preserving rollback if preparation fails.
 
-All explicit arguments are forwarded unchanged to the bundled OpenClaw CLI
-after payload preparation. The host does not reserve, consume, reject, or
-rewrite OpenClaw commands or options.
+After payload preparation, the launcher forwards every invocation unchanged to
+the bundled OpenClaw CLI. This includes an invocation with no arguments. The
+launcher does not reserve, consume, reject, or rewrite OpenClaw commands or
+options, and it does not pause after the OpenClaw process exits.
 
 Every OpenClaw child process runs with
 `OPENCLAW_SUPERVISOR_MODE=external` and `OPENCLAW_NO_AUTO_UPDATE=1`. This makes
@@ -105,7 +92,7 @@ key is stored in the repository.
 |---|---|
 | Prepared gateway files | `%USERPROFILE%\.openclaw-msix\app` |
 | OpenClaw configuration and user state | `%USERPROFILE%\.openclaw` |
-| Bootstrap diagnostics | `%LOCALAPPDATA%\Packages\<package-family>\LocalState\OpenClawGatewayMSIX\Logs\openclaw.log` |
+| Launcher diagnostics | `%LOCALAPPDATA%\Packages\<package-family>\LocalState\OpenClawGatewayMSIX\Logs\openclaw.log` |
 
 The prepared gateway and OpenClaw user state are outside the immutable MSIX
 installation directory. Updating or removing the MSIX does not automatically
@@ -119,8 +106,7 @@ be removed manually after OpenClaw is stopped.
 Normal launches verify the immutable payload archive shipped in the MSIX, then
 use the prepared payload marker to avoid re-hashing every extracted file.
 Re-hashing the complete prepared payload on every launch was intentionally
-rejected because it substantially delayed OpenClaw startup. The **R** bootstrap
-action remains available for an explicit full verification and repair.
+rejected because it substantially delayed OpenClaw startup.
 
 The prepared gateway directory is writable by the current user and is treated
 as user-owned application state, not as a tamper-resistant trust boundary.
