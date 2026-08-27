@@ -123,7 +123,7 @@ foreach ($architecture in @('x64', 'arm64')) {
     $msix = $msixFiles[0]
     if (
         $metadata.packagingRepository -ne
-            'https://github.com/openclaw/openclaw-windows-node' -or
+            'https://github.com/openclaw/openclaw-windows-packaging' -or
         $metadata.packagingCommit -ine $expectedPackagingCommit -or
         $metadata.sourceTreeDirty -ne $false -or
         $metadata.payloadRepository -ne $policy.repository -or

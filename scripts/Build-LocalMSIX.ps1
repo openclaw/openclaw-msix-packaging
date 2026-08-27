@@ -14,7 +14,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repositoryRoot = Split-Path $PSScriptRoot -Parent
-$repository = 'openclaw/openclaw-windows-node'
+$repository = 'openclaw/openclaw-windows-packaging'
 
 function Invoke-CheckedCommand {
     param(
