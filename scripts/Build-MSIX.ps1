@@ -8,9 +8,6 @@ param(
     [string]$Architecture,
 
     [Parameter(Mandatory)]
-    [string]$NodeVersion,
-
-    [Parameter(Mandatory)]
     [string]$PackageVersion,
 
     [Parameter(Mandatory)]
@@ -94,6 +91,9 @@ function Add-VswhereToPath {
 
 Test-PackageVersion
 Add-VswhereToPath
+$OutputDirectory = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath(
+    $OutputDirectory
+)
 
 $PayloadDirectory = (Resolve-Path -LiteralPath $PayloadDirectory).Path
 $payloadArchive = Join-Path $PayloadDirectory "app-$Architecture.tar.gz"
@@ -122,9 +122,19 @@ if ($payloadInfo.sha256 -ine $payloadHash) {
     throw 'Payload hash does not match payload metadata.'
 }
 
+$payloadEntries = @(& tar -tzf $payloadArchive)
+if ($LASTEXITCODE -ne 0) {
+    throw 'Unable to inspect the OpenClaw payload archive.'
+}
+$bundledNodeEntries = @($payloadEntries | Where-Object {
+    $_ -match '(^|/)node\.exe$'
+})
+if ($bundledNodeEntries.Count -ne 0) {
+    throw 'The OpenClaw payload unexpectedly contains node.exe.'
+}
+
 $contentRoot = Join-Path $repositoryRoot 'content'
 $openClawContent = Join-Path $contentRoot 'openclaw'
-$runtimeTarget = Join-Path (Join-Path $contentRoot 'runtime') $Architecture
 New-Item -Path $openClawContent -ItemType Directory -Force | Out-Null
 
 $stagedPayloadArchive = Join-Path `
@@ -153,63 +163,19 @@ else {
 $workRoot = Join-Path `
     $temporaryRoot `
     "openclaw-msix-$Architecture-$([guid]::NewGuid().ToString('N'))"
-$nodeDownload = Join-Path $workRoot 'node'
-$nodeExtract = Join-Path $workRoot 'node-extract'
 $msixBuildDirectory = Join-Path $workRoot 'appx'
 New-Item `
-    -Path $nodeDownload, $nodeExtract, $msixBuildDirectory, $OutputDirectory `
+    -Path $msixBuildDirectory, $OutputDirectory `
     -ItemType Directory `
     -Force |
     Out-Null
 
 try {
-    $nodeArchiveName = "node-v$NodeVersion-win-$Architecture.zip"
-    $nodeBaseUrl = "https://nodejs.org/dist/v$NodeVersion"
-    $nodeArchiveUrl = "$nodeBaseUrl/$nodeArchiveName"
-    $nodeArchivePath = Join-Path $nodeDownload $nodeArchiveName
-    $checksumsPath = Join-Path $nodeDownload 'SHASUMS256.txt'
-    Invoke-WebRequest -Uri "$nodeBaseUrl/SHASUMS256.txt" -OutFile $checksumsPath
-    Invoke-WebRequest -Uri $nodeArchiveUrl -OutFile $nodeArchivePath
-
-    $checksumLine = Get-Content -LiteralPath $checksumsPath |
-        Where-Object {
-            $_ -match "^[0-9a-fA-F]{64}\s+$([regex]::Escape($nodeArchiveName))$"
-        } |
-        Select-Object -First 1
-    if (-not $checksumLine) {
-        throw "Official checksum was not found for $nodeArchiveName."
-    }
-
-    $expectedNodeHash = ($checksumLine -split '\s+')[0].ToLowerInvariant()
-    $actualNodeHash = (
-        Get-FileHash -LiteralPath $nodeArchivePath -Algorithm SHA256
-    ).Hash.ToLowerInvariant()
-    if ($actualNodeHash -ne $expectedNodeHash) {
-        throw 'Node.js archive hash does not match the official checksum.'
-    }
-
-    Copy-Item `
-        -LiteralPath $nodeArchivePath `
-        -Destination (Join-Path $openClawContent $nodeArchiveName) `
-        -Force
-    Expand-Archive -LiteralPath $nodeArchivePath -DestinationPath $nodeExtract
-    $nodeRoot = @(Get-ChildItem -LiteralPath $nodeExtract -Directory)
-    if (
-        $nodeRoot.Count -ne 1 -or
-        -not (Test-Path -LiteralPath (Join-Path $nodeRoot[0].FullName 'node.exe'))
-    ) {
-        throw 'The official Node.js archive has an unexpected layout.'
-    }
-
-    Remove-DirectoryIfPresent -Path $runtimeTarget
-    New-Item -Path $runtimeTarget -ItemType Directory -Force | Out-Null
-    Copy-Item `
-        -Path (Join-Path $nodeRoot[0].FullName '*') `
-        -Destination $runtimeTarget `
-        -Recurse
-
     $appxOutput = $msixBuildDirectory.TrimEnd('\') + '\'
-    Write-Host "Building unsigned NativeAOT win-$Architecture MSIX with MSBuild."
+    Write-Host (
+        "Building unsigned NativeAOT win-$Architecture MSIX without a bundled " +
+        'Node.js runtime.'
+    )
     Invoke-CheckedCommand `
         -FailureMessage 'NativeAOT MSIX build failed.' `
         -Command {
@@ -259,22 +225,6 @@ try {
             Hash = $payloadHash
         }
     )
-    foreach ($runtimeFile in Get-ChildItem -LiteralPath $runtimeTarget -File -Recurse) {
-        $relativePath = (
-            [IO.Path]::GetRelativePath($runtimeTarget, $runtimeFile.FullName)
-        ).Replace('\', '/')
-        $expectedPackageFiles.Add(
-            "runtime/$relativePath",
-            [pscustomobject]@{
-                Hash = (
-                    Get-FileHash `
-                        -LiteralPath $runtimeFile.FullName `
-                        -Algorithm SHA256
-                ).Hash.ToLowerInvariant()
-            }
-        )
-    }
-
     $packageEntries = [System.Collections.Generic.HashSet[string]]::new(
         [System.StringComparer]::OrdinalIgnoreCase
     )
@@ -323,6 +273,18 @@ try {
     if (-not $packageEntries.Contains('openclaw.exe')) {
         throw 'The MSIX does not contain the NativeAOT host executable.'
     }
+    $packagedNodeEntries = @($packageEntries | Where-Object {
+        [IO.Path]::GetFileName($_) -ieq 'node.exe'
+    })
+    if ($packagedNodeEntries.Count -ne 0) {
+        throw 'The MSIX unexpectedly contains node.exe.'
+    }
+    $bundledRuntimeEntries = @($packageEntries | Where-Object {
+        $_.StartsWith('runtime/', [StringComparison]::OrdinalIgnoreCase)
+    })
+    if ($bundledRuntimeEntries.Count -ne 0) {
+        throw 'The MSIX unexpectedly contains a bundled runtime.'
+    }
     foreach ($managedHostArtifact in @(
         'openclaw.dll',
         'openclaw.deps.json',
@@ -360,9 +322,9 @@ try {
         signed = $false
         packageVersion = $PackageVersion
         publisher = $publisher
-        nodeVersion = $NodeVersion
-        nodeArchive = $nodeArchiveName
-        nodeArchiveSha256 = $actualNodeHash
+        nodeRuntime = 'external-winget'
+        nodePackageId = 'OpenJS.NodeJS.LTS'
+        minimumNodeVersion = '24.16.0'
     } | ConvertTo-Json |
         Set-Content `
             -LiteralPath (Join-Path $OutputDirectory 'msix-metadata.json') `

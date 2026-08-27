@@ -5,8 +5,11 @@ This repository builds a Windows MSIX package containing:
 - a .NET 10 NativeAOT launcher exposed as the `openclaw` app execution
   alias;
 - a pinned, verified build of
-  [`openclaw/openclaw`](https://github.com/openclaw/openclaw);
-- the matching official Node.js runtime for x64 or ARM64.
+  [`openclaw/openclaw`](https://github.com/openclaw/openclaw).
+
+Node.js is deliberately not redistributed in the MSIX. The launcher uses a
+compatible system installation or installs the official
+`OpenJS.NodeJS.LTS` package through Windows Package Manager.
 
 The package is independent from the OpenClaw Companion application and uses a
 separate `OpenClaw.Gateway` package identity. Both packages use the OpenClaw
@@ -23,6 +26,20 @@ An invocation with no arguments remains the temporary package preparation
 surface. On an existing installation it offers fast verification or full
 verification and repair. This explicit repair path remains until a separate
 management command can replace it.
+
+Before preparing or launching OpenClaw, the launcher locates Node.js, checks
+that it is version 24.16.0 or newer, and requires its architecture to match the
+launcher. If no compatible runtime exists, it invokes:
+
+```powershell
+winget install --id OpenJS.NodeJS.LTS --exact --source winget `
+  --accept-package-agreements --accept-source-agreements --silent
+```
+
+The launcher re-discovers and validates Node after WinGet exits; a successful
+WinGet exit alone is not treated as proof that the prerequisite is usable.
+`OPENCLAW_NODE_PATH` can select an explicit Node executable for development or
+diagnostics.
 
 Every invocation containing arguments is forwarded unchanged to the bundled
 OpenClaw CLI. The launcher does not reserve, consume, reject, or rewrite those
@@ -68,10 +85,10 @@ dotnet test .\OpenClaw.Gateway.MSIX.slnx `
 ```
 
 `scripts\Build-Payload.ps1` turns an OpenClaw npm package into an
-architecture-specific payload. `scripts\Build-MSIX.ps1` verifies that payload,
-downloads and verifies the official Node.js runtime, then creates an unsigned
-NativeAOT MSIX. `scripts\Build-LocalMSIX.ps1` can reuse a successful workflow
-payload or a local payload directory.
+architecture-specific payload. `scripts\Build-MSIX.ps1` verifies that payload
+and creates an unsigned NativeAOT MSIX without embedding Node.js.
+`scripts\Build-LocalMSIX.ps1` can reuse a successful workflow payload or a
+local payload directory.
 
 Normal pull-request and push workflows publish unsigned packages for
 validation. Manual runs support three signing modes:

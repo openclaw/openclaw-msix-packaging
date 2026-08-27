@@ -8,7 +8,6 @@ public sealed class HostOptionsTests
         HostOptions options = HostOptions.Parse(
         [
             "--host-payload", "payload.tar.gz",
-            "--host-node", "test-node.exe",
             "--",
             "gateway", "run", "--port", "12345"
         ]);
@@ -16,7 +15,6 @@ public sealed class HostOptionsTests
         Assert.Equal(
             [
                 "--host-payload", "payload.tar.gz",
-                "--host-node", "test-node.exe",
                 "--",
                 "gateway", "run", "--port", "12345"
             ],

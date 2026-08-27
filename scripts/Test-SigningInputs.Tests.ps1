@@ -35,10 +35,17 @@ function New-TestArtifact {
 
     $payloadArchiveName = "app-$Architecture.tar.gz"
     $payloadArchivePath = Join-Path $payloadDirectory $payloadArchiveName
-    [IO.File]::WriteAllBytes(
-        $payloadArchivePath,
-        [Text.Encoding]::UTF8.GetBytes("payload-$Architecture")
-    )
+    $payloadContent = Join-Path $staging 'payload-content'
+    New-Item -Path $payloadContent -ItemType Directory -Force | Out-Null
+    Set-Content `
+        -LiteralPath (Join-Path $payloadContent 'openclaw.mjs') `
+        -Value "console.log('$Architecture');" `
+        -Encoding utf8
+    & tar -czf $payloadArchivePath -C $payloadContent .
+    if ($LASTEXITCODE -ne 0) {
+        throw "Unable to create the $Architecture payload fixture."
+    }
+    Remove-Item -LiteralPath $payloadContent -Recurse -Force
     $payloadHash = (
         Get-FileHash -LiteralPath $payloadArchivePath -Algorithm SHA256
     ).Hash.ToLowerInvariant()
@@ -93,9 +100,9 @@ function New-TestArtifact {
         signed = $false
         packageVersion = '0.1.1.0'
         publisher = $policy.publisher
-        nodeVersion = '24.16.0'
-        nodeArchive = "node-v24.16.0-win-$Architecture.zip"
-        nodeArchiveSha256 = ('2' * 64)
+        nodeRuntime = 'external-winget'
+        nodePackageId = 'OpenJS.NodeJS.LTS'
+        minimumNodeVersion = '24.16.0'
     } |
         ConvertTo-Json |
         Set-Content `

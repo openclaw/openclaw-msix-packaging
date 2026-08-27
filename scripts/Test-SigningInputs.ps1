@@ -74,6 +74,52 @@ function Get-ZipEntrySha256 {
     }
 }
 
+function Assert-PayloadDoesNotContainNode {
+    param(
+        [Parameter(Mandatory)]
+        [IO.Compression.ZipArchive]$Archive,
+
+        [Parameter(Mandatory)]
+        [string]$Path
+    )
+
+    $entries = @($Archive.Entries | Where-Object {
+        $_.FullName -eq $Path
+    })
+    if ($entries.Count -ne 1) {
+        throw "Expected one '$Path' entry; found $($entries.Count)."
+    }
+
+    $temporaryPath = Join-Path `
+        ([IO.Path]::GetTempPath()) `
+        "openclaw-signing-payload-$([guid]::NewGuid().ToString('N')).tar.gz"
+    $source = $entries[0].Open()
+    $destination = [IO.File]::Create($temporaryPath)
+    try {
+        $source.CopyTo($destination)
+    }
+    finally {
+        $destination.Dispose()
+        $source.Dispose()
+    }
+
+    try {
+        $payloadEntries = @(& tar -tzf $temporaryPath)
+        if ($LASTEXITCODE -ne 0) {
+            throw "Unable to inspect '$Path'."
+        }
+        $bundledNodeEntries = @($payloadEntries | Where-Object {
+            $_ -match '(^|/)node\.exe$'
+        })
+        if ($bundledNodeEntries.Count -ne 0) {
+            throw "The embedded payload '$Path' contains node.exe."
+        }
+    }
+    finally {
+        Remove-Item -LiteralPath $temporaryPath -Force -ErrorAction SilentlyContinue
+    }
+}
+
 $resolvedArtifactsDirectory = (
     Resolve-Path -LiteralPath $ArtifactsDirectory
 ).Path
@@ -133,7 +179,10 @@ foreach ($architecture in @('x64', 'arm64')) {
         $metadata.archive -ne $msix.Name -or
         $metadata.sha256 -notmatch '^[0-9a-fA-F]{64}$' -or
         $metadata.signed -ne $false -or
-        $metadata.publisher -ne $policy.publisher
+        $metadata.publisher -ne $policy.publisher -or
+        $metadata.nodeRuntime -ne 'external-winget' -or
+        $metadata.nodePackageId -ne 'OpenJS.NodeJS.LTS' -or
+        $metadata.minimumNodeVersion -ne '24.16.0'
     ) {
         throw "The $architecture MSIX metadata is not eligible for signing."
     }
@@ -196,6 +245,25 @@ foreach ($architecture in @('x64', 'arm64')) {
                 ([string]$payloadMetadata.sha256).ToLowerInvariant()
         ) {
             throw "The embedded $architecture payload hash is invalid."
+        }
+        Assert-PayloadDoesNotContainNode `
+            -Archive $packageArchive `
+            -Path $payloadArchivePath
+
+        $packagedNodeEntries = @($packageArchive.Entries | Where-Object {
+            $_.Name -ieq 'node.exe'
+        })
+        if ($packagedNodeEntries.Count -ne 0) {
+            throw "The $architecture MSIX unexpectedly contains node.exe."
+        }
+        $bundledRuntimeEntries = @($packageArchive.Entries | Where-Object {
+            [Uri]::UnescapeDataString($_.FullName).StartsWith(
+                'runtime/',
+                [StringComparison]::OrdinalIgnoreCase
+            )
+        })
+        if ($bundledRuntimeEntries.Count -ne 0) {
+            throw "The $architecture MSIX unexpectedly contains a bundled runtime."
         }
     }
     finally {

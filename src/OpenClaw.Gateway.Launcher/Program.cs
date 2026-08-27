@@ -92,6 +92,9 @@ internal static class Program
             }
 
             HostOptions options = HostOptions.Parse(args);
+            NodeRuntimeInfo nodeRuntime = await SystemNodeRuntime
+                .CreateResolver(ReportProgress)
+                .ResolveAsync(CancellationToken.None);
             bool isBootstrapLaunch = options.OpenClawArguments.Count == 0;
             bool verifyInstalledPayload = false;
             if (isBootstrapLaunch)
@@ -119,7 +122,7 @@ internal static class Program
             }
 
             int exitCode = await GatewayLauncher.RunAsync(
-                options.NodePath,
+                nodeRuntime.ExecutablePath,
                 payload.DirectoryPath,
                 options.OpenClawArguments,
                 CancellationToken.None,
