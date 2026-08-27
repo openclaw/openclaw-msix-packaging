@@ -1,4 +1,4 @@
-namespace OpenClaw.MSIXHost;
+namespace OpenClaw.Gateway.Launcher;
 
 public enum BootstrapAction
 {
@@ -21,11 +21,6 @@ public static class BootstrapConsole
         output.WriteLine();
         output.WriteLine("OpenClaw gateway files were prepared by an earlier launch:");
         output.WriteLine($"  {installDirectory}");
-        output.WriteLine();
-        output.WriteLine("If OpenClaw is already configured and working, you can close");
-        output.WriteLine("this window and launch it with:");
-        output.WriteLine("  openclaw gateway run");
-
         output.WriteLine();
         output.WriteLine("[C] Continue with fast verification [recommended]");
         output.WriteLine("[R] Retry preparation with full verification and repair");
@@ -61,23 +56,6 @@ public static class BootstrapConsole
                 : "The packaged payload was verified and prepared.");
         output.WriteLine($"Prepared files: {payload.DirectoryPath}");
         output.WriteLine();
-        output.WriteLine("Next steps:");
-        output.WriteLine("  1. Configure OpenClaw:");
-        output.WriteLine(
-            "     openclaw setup --classic --mode local --no-install-daemon");
-        output.WriteLine("  2. Start the gateway after setup:");
-        output.WriteLine("     openclaw gateway run");
-        output.WriteLine();
-        output.WriteLine(
-            "This bootstrap launch did not start the gateway automatically.");
-        output.WriteLine(
-            "You can close this window after noting the commands above.");
-    }
-
-    public static void WaitForExit(TextReader input, TextWriter output)
-    {
-        output.WriteLine();
-        output.Write("Press Enter to close this window...");
-        input.ReadLine();
+        output.WriteLine("Run `openclaw <arguments>` to invoke the OpenClaw CLI.");
     }
 }

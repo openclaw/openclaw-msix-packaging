@@ -1,4 +1,4 @@
-namespace OpenClaw.MSIXHost.Tests;
+namespace OpenClaw.Gateway.Launcher.Tests;
 
 public sealed class BootstrapConsoleTests : IDisposable
 {
@@ -70,7 +70,7 @@ public sealed class BootstrapConsoleTests : IDisposable
             output.ToString(),
             StringComparison.Ordinal);
         Assert.Contains(
-            "openclaw gateway run",
+            "[R] Retry preparation with full verification and repair",
             output.ToString(),
             StringComparison.Ordinal);
     }
@@ -78,7 +78,7 @@ public sealed class BootstrapConsoleTests : IDisposable
     [Theory]
     [InlineData(true, "existing prepared payload was verified and reused")]
     [InlineData(false, "packaged payload was verified and prepared")]
-    public void WritePreparationSummaryUsesPackagedAlias(
+    public void WritePreparationSummaryDescribesResult(
         bool reused,
         string expectedStatus)
     {
@@ -94,35 +94,8 @@ public sealed class BootstrapConsoleTests : IDisposable
         string summary = output.ToString();
         Assert.Contains(expectedStatus, summary, StringComparison.Ordinal);
         Assert.Contains(
-            "openclaw setup --classic --mode local --no-install-daemon",
+            "openclaw <arguments>",
             summary,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "openclaw gateway run",
-            summary,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "did not start the gateway automatically",
-            summary,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "close this window",
-            summary,
-            StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void WaitForExitPrintsPersistentConsoleInstruction()
-    {
-        var output = new StringWriter();
-
-        BootstrapConsole.WaitForExit(
-            new StringReader(Environment.NewLine),
-            output);
-
-        Assert.Contains(
-            "Press Enter to close this window",
-            output.ToString(),
             StringComparison.Ordinal);
     }
 

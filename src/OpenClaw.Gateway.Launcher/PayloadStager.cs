@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text.Json;
 
-namespace OpenClaw.MSIXHost;
+namespace OpenClaw.Gateway.Launcher;
 
 public sealed class PayloadStager(
     string installDirectory,

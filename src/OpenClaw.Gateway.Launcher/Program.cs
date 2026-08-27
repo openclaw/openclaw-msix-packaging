@@ -1,4 +1,4 @@
-namespace OpenClaw.MSIXHost;
+namespace OpenClaw.Gateway.Launcher;
 
 internal static class Program
 {
@@ -148,20 +148,6 @@ internal static class Program
         }
         finally
         {
-            if (!Console.IsInputRedirected)
-            {
-                try
-                {
-                    BootstrapConsole.WaitForExit(Console.In, Console.Out);
-                }
-                catch (Exception exception) when (
-                    exception is IOException or ObjectDisposedException)
-                {
-                    WriteDiagnostic(
-                        $"Unable to wait for console input: {exception.GetType().Name}.");
-                }
-            }
-
             WriteDiagnostic("Host exiting.");
             diagnostics?.Dispose();
         }

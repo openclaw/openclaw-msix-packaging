@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace OpenClaw.MSIXHost;
+namespace OpenClaw.Gateway.Launcher;
 
 public sealed class HostDiagnosticLog : IDisposable
 {

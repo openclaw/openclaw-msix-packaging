@@ -1,4 +1,4 @@
-namespace OpenClaw.MSIXHost.Tests;
+namespace OpenClaw.Gateway.Launcher.Tests;
 
 public sealed class GatewayLauncherTests : IDisposable
 {
@@ -12,7 +12,7 @@ public sealed class GatewayLauncherTests : IDisposable
     }
 
     [Fact]
-    public void CreateStartInfoDefaultsToForegroundGateway()
+    public void CreateStartInfoForwardsNoArgumentsUnchanged()
     {
         var startInfo = GatewayLauncher.CreateStartInfo(
             "node",
@@ -20,79 +20,15 @@ public sealed class GatewayLauncherTests : IDisposable
             []);
 
         Assert.False(startInfo.UseShellExecute);
-        Assert.True(startInfo.RedirectStandardError);
+        Assert.False(startInfo.RedirectStandardError);
         Assert.Equal(_payloadDirectory, startInfo.WorkingDirectory);
         Assert.Equal(
             "external",
             startInfo.Environment["OPENCLAW_SUPERVISOR_MODE"]);
         Assert.Equal("1", startInfo.Environment["OPENCLAW_NO_AUTO_UPDATE"]);
         Assert.Equal(
-            [
-                Path.Combine(_payloadDirectory, "openclaw.mjs"),
-                "gateway",
-                "run"
-            ],
+            [Path.Combine(_payloadDirectory, "openclaw.mjs")],
             startInfo.ArgumentList);
-    }
-
-    [Fact]
-    public async Task ForwardStandardErrorSuppressesModulePreparationClixml()
-    {
-        const string input = """
-            #< CLIXML
-            <Objs><Obj S="progress"><MS><PR><AV>Preparing modules for first use.</AV></PR></MS></Obj></Objs>
-            Missing config.
-            """;
-        var output = new StringWriter();
-
-        await GatewayLauncher.ForwardStandardErrorAsync(
-            new StringReader(input),
-            output,
-            CancellationToken.None);
-
-        Assert.Equal($"Missing config.{Environment.NewLine}", output.ToString());
-    }
-
-    [Fact]
-    public async Task ForwardStandardErrorPreservesOtherClixml()
-    {
-        const string input = """
-            #< CLIXML
-            <Objs><S>Actual PowerShell failure</S></Objs>
-            """;
-        var output = new StringWriter();
-
-        await GatewayLauncher.ForwardStandardErrorAsync(
-            new StringReader(input),
-            output,
-            CancellationToken.None);
-
-        Assert.Contains("#< CLIXML", output.ToString(), StringComparison.Ordinal);
-        Assert.Contains(
-            "Actual PowerShell failure",
-            output.ToString(),
-            StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task ForwardStandardErrorPreservesMixedProgressAndErrorClixml()
-    {
-        const string input = """
-            #< CLIXML
-            <Objs><Obj S="progress"><S>Preparing modules for first use.</S></Obj><Obj S="error"><S>Gateway failure</S></Obj></Objs>
-            """;
-        var output = new StringWriter();
-
-        await GatewayLauncher.ForwardStandardErrorAsync(
-            new StringReader(input),
-            output,
-            CancellationToken.None);
-
-        Assert.Contains(
-            "Preparing modules for first use.",
-            output.ToString(),
-            StringComparison.Ordinal);
-        Assert.Contains("Gateway failure", output.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]

@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace OpenClaw.MSIXHost;
+namespace OpenClaw.Gateway.Launcher;
 
 public sealed record HostOptions(
     string PayloadPath,
