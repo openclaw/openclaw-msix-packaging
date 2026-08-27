@@ -19,10 +19,14 @@ moves any existing prepared payload aside, and promotes the new payload only
 after extraction and verification succeed. The previous payload is removed
 after successful promotion, preserving rollback if preparation fails.
 
-After payload preparation, the launcher forwards every invocation unchanged to
-the bundled OpenClaw CLI. This includes an invocation with no arguments. The
-launcher does not reserve, consume, reject, or rewrite OpenClaw commands or
-options, and it does not pause after the OpenClaw process exits.
+An invocation with no arguments remains the temporary package preparation
+surface. On an existing installation it offers fast verification or full
+verification and repair. This explicit repair path remains until a separate
+management command can replace it.
+
+Every invocation containing arguments is forwarded unchanged to the bundled
+OpenClaw CLI. The launcher does not reserve, consume, reject, or rewrite those
+commands or options, and it does not pause after the OpenClaw process exits.
 
 Every OpenClaw child process runs with
 `OPENCLAW_SUPERVISOR_MODE=external` and `OPENCLAW_NO_AUTO_UPDATE=1`. This makes

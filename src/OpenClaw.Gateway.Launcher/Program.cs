@@ -92,13 +92,31 @@ internal static class Program
             }
 
             HostOptions options = HostOptions.Parse(args);
+            bool isBootstrapLaunch = options.OpenClawArguments.Count == 0;
+            bool verifyInstalledPayload = false;
+            if (isBootstrapLaunch)
+            {
+                BootstrapAction action = BootstrapConsole.PromptForAction(
+                    options.InstallDirectory,
+                    Console.In,
+                    Console.Out);
+                verifyInstalledPayload = action == BootstrapAction.PrepareFull;
+            }
+
             var stager = new PayloadStager(
                 options.InstallDirectory,
-                ReportProgress);
+                ReportProgress,
+                verifyInstalledPayload);
             StagedPayload payload = await stager.StageAsync(
                 options.PayloadPath,
                 options.MetadataPath,
                 CancellationToken.None);
+
+            if (isBootstrapLaunch)
+            {
+                BootstrapConsole.WritePreparationSummary(Console.Out, payload);
+                return 0;
+            }
 
             int exitCode = await GatewayLauncher.RunAsync(
                 options.NodePath,
