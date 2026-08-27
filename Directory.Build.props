@@ -1,7 +1,0 @@
-<Project>
-
-  <PropertyGroup>
-    <MSBuildProjectExtensionsPath Condition="'$(IncludePackagingContent)' == 'true'">$(MSBuildProjectDirectory)\obj\packaging\</MSBuildProjectExtensionsPath>
-  </PropertyGroup>
-
-</Project>
