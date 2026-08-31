@@ -26,8 +26,8 @@ permissions:
   contents: read
 
 env:
-  NODE_VERSION: 24.16.0
-  PNPM_VERSION: 11.15.1
+  NODE_VERSION: 24.20.0
+  PNPM_VERSION: 11.24.0
   OPENCLAW_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.openclaw_ref || '0790d9f593ad30c940ed93b5872a8cf6d6f3cf8c' }}
   PACKAGING_ROOT: .
 
@@ -65,6 +65,10 @@ jobs:
   build-package:
     name: Build OpenClaw npm package
     runs-on: ubuntu-latest
+    env:
+      # The packaging toolchain owns pnpm, including inside upstream scripts.
+      COREPACK_ENABLE_PROJECT_SPEC: "0"
+      pnpm_config_pm_on_fail: ignore
     outputs:
       source_sha: ${{ steps.source.outputs.sha }}
       package_version: ${{ steps.source.outputs.version }}
@@ -79,7 +83,7 @@ jobs:
           fetch-depth: 1
 
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
 
@@ -90,7 +94,9 @@ jobs:
 
       - name: Install dependencies
         working-directory: openclaw-source
-        run: pnpm install --frozen-lockfile
+        run: |
+          test "$(pnpm --version)" = "${PNPM_VERSION}"
+          pnpm install --frozen-lockfile
 
       - name: Build OpenClaw
         working-directory: openclaw-source
@@ -153,7 +159,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
 
@@ -234,6 +240,19 @@ jobs:
             -PackageVersion $packageVersion `
             -SourceCommit '${{ github.sha }}' `
             -OutputDirectory '${{ runner.temp }}\openclaw-msix'
+
+      - name: Smoke-test packaged x64 launcher
+        if: matrix.architecture == 'x64'
+        shell: pwsh
+        run: |
+          $package = '${{ runner.temp }}\openclaw-msix\OpenClawGateway-x64.msix'
+          $unpacked = '${{ runner.temp }}\openclaw-msix-smoke'
+          [IO.Compression.ZipFile]::ExtractToDirectory($package, $unpacked)
+          & (Join-Path $unpacked 'openclaw.exe') --version
+          if ($LASTEXITCODE -ne 0) {
+            throw "Packaged launcher smoke test failed with exit code $LASTEXITCODE."
+          }
+          Write-Host 'Packaged launcher smoke test passed.'
 
       - name: Upload unsigned MSIX
         uses: actions/upload-artifact@v7
