@@ -8,6 +8,9 @@ This repository builds a Windows MSIX package containing:
   [`openclaw/openclaw`](https://github.com/openclaw/openclaw);
 - the matching official Node.js runtime for x64 or ARM64.
 
+Builds use .NET SDK 10.0.400 or a later .NET 10 feature band and bundle
+Node.js 24.20.0 LTS for both architectures.
+
 The package is independent from the OpenClaw Companion application and uses a
 separate `OpenClaw.Gateway` package identity. Both packages use the OpenClaw
 Foundation publisher metadata established for OpenClaw's Windows packages.
