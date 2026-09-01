@@ -27,7 +27,7 @@ $ErrorActionPreference = 'Stop'
 $repositoryRoot = Split-Path $PSScriptRoot -Parent
 $projectPath = Join-Path `
     $repositoryRoot `
-    'src\OpenClaw.Gateway.Launcher\OpenClaw.Gateway.Launcher.csproj'
+    'src\OpenClaw.Gateway.Launcher\OpenClaw.WindowsLauncher.csproj'
 $publisher = (
     'CN=OpenClaw Foundation, O=OpenClaw Foundation, L=Mill Valley, ' +
     'S=California, C=US'
@@ -69,6 +69,12 @@ function Test-PackageVersion {
         [uint16]$value = 0
         if (-not [uint16]::TryParse($segment, [ref]$value)) {
             throw "Invalid MSIX package version component: $segment"
+        }
+        if ($value -gt 65534) {
+            throw (
+                "PackageVersion component $segment exceeds the .NET " +
+                'assembly version maximum of 65534.'
+            )
         }
     }
 }
@@ -223,6 +229,8 @@ try {
                 -p:SelfContained=true `
                 -p:IncludePackagingContent=true `
                 -p:GenerateAppxPackageOnBuild=true `
+                "-p:AssemblyVersion=$PackageVersion" `
+                "-p:FileVersion=$PackageVersion" `
                 "-p:PackageIdentityVersion=$PackageVersion" `
                 "-p:AppxPackageDir=$appxOutput" `
                 -p:AppxBundle=Never `
@@ -314,6 +322,45 @@ try {
                 throw "MSBuild changed package content: $decodedPath"
             }
 
+        }
+
+        $manifestEntry = $packageArchive.GetEntry('AppxManifest.xml')
+        if (-not $manifestEntry) {
+            throw 'The MSIX does not contain AppxManifest.xml.'
+        }
+
+        $manifestStream = $manifestEntry.Open()
+        $manifestReader = [IO.StreamReader]::new($manifestStream)
+        try {
+            [xml]$manifest = $manifestReader.ReadToEnd()
+        }
+        finally {
+            $manifestReader.Dispose()
+            $manifestStream.Dispose()
+        }
+
+        $aliasExtension = @(
+            $manifest.SelectNodes(
+                "//*[local-name()='Extension' and @Category='windows.appExecutionAlias']"
+            )
+        )
+        if ($aliasExtension.Count -ne 1) {
+            throw 'The MSIX must contain one app execution alias extension.'
+        }
+        if ($aliasExtension[0].Executable -ne 'openclaw.exe') {
+            throw 'Both command aliases must target openclaw.exe.'
+        }
+
+        $registeredAliases = @(
+            $aliasExtension[0].SelectNodes(
+                ".//*[local-name()='ExecutionAlias']"
+            ) |
+                ForEach-Object { $_.Alias }
+        )
+        foreach ($requiredAlias in @('openclaw.exe', 'clawctl.exe')) {
+            if ($requiredAlias -notin $registeredAliases) {
+                throw "The MSIX does not register $requiredAlias."
+            }
         }
     }
     finally {

@@ -5,11 +5,138 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-namespace OpenClaw.Gateway.Launcher.Tests;
+namespace OpenClaw.WindowsLauncher.Tests;
 
 public sealed class PayloadStagerTests : IDisposable
 {
     private readonly string _testDirectory = TestDirectory.Create();
+
+    [Fact]
+    public async Task VerifyAsyncReportsValidPreparedPayloadWithoutChangingIt()
+    {
+        PackageFixture fixture = await CreatePackageAsync(
+        [
+            new PaxTarEntry(TarEntryType.RegularFile, "openclaw.mjs")
+            {
+                DataStream = TextStream("fixture")
+            }
+        ]);
+        string installDirectory = Path.Combine(_testDirectory, "app");
+        var stager = new PayloadStager(installDirectory);
+        await stager.StageAsync(
+            fixture.ArchivePath,
+            fixture.MetadataPath,
+            CancellationToken.None);
+
+        PayloadVerification verification = await stager.VerifyAsync(
+            fixture.ArchivePath,
+            fixture.MetadataPath,
+            CancellationToken.None);
+
+        Assert.True(verification.IsValid);
+    }
+
+    [Fact]
+    public async Task VerifyAsyncReportsDamageWithoutRepairingIt()
+    {
+        PackageFixture fixture = await CreatePackageAsync(
+        [
+            new PaxTarEntry(TarEntryType.RegularFile, "openclaw.mjs")
+            {
+                DataStream = TextStream("original")
+            }
+        ]);
+        string installDirectory = Path.Combine(_testDirectory, "app");
+        var stager = new PayloadStager(installDirectory);
+        await stager.StageAsync(
+            fixture.ArchivePath,
+            fixture.MetadataPath,
+            CancellationToken.None);
+        string entryPoint = Path.Combine(installDirectory, "openclaw.mjs");
+        await File.WriteAllTextAsync(entryPoint, "damaged");
+
+        PayloadVerification verification = await stager.VerifyAsync(
+            fixture.ArchivePath,
+            fixture.MetadataPath,
+            CancellationToken.None);
+
+        Assert.False(verification.IsValid);
+        Assert.Equal("damaged", await File.ReadAllTextAsync(entryPoint));
+    }
+
+    [Fact]
+    public async Task VerifyAsyncRefusesToRacePayloadMutation()
+    {
+        PackageFixture fixture = await CreatePackageAsync(
+        [
+            new PaxTarEntry(TarEntryType.RegularFile, "openclaw.mjs")
+            {
+                DataStream = TextStream("fixture")
+            }
+        ]);
+        string installDirectory = Path.Combine(_testDirectory, "app");
+        var stager = new PayloadStager(installDirectory);
+        await stager.StageAsync(
+            fixture.ArchivePath,
+            fixture.MetadataPath,
+            CancellationToken.None);
+        using FileStream mutation =
+            PayloadRuntimeLock.AcquireForMutation(installDirectory);
+
+        InvalidOperationException exception =
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                () => stager.VerifyAsync(
+                    fixture.ArchivePath,
+                    fixture.MetadataPath,
+                    CancellationToken.None));
+
+        Assert.Contains(
+            "being prepared or repaired",
+            exception.Message,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RepairRefusesToReplacePayloadWhileOpenClawUsesIt()
+    {
+        PackageFixture fixture = await CreatePackageAsync(
+        [
+            new PaxTarEntry(TarEntryType.RegularFile, "openclaw.mjs")
+            {
+                DataStream = TextStream("original")
+            }
+        ]);
+        string installDirectory = Path.Combine(_testDirectory, "app");
+        var prepare = new PayloadStager(installDirectory);
+        await prepare.StageAsync(
+            fixture.ArchivePath,
+            fixture.MetadataPath,
+            CancellationToken.None);
+        await File.WriteAllTextAsync(
+            Path.Combine(installDirectory, "openclaw.mjs"),
+            "damaged");
+        using FileStream runtime =
+            PayloadRuntimeLock.AcquireForLaunch(installDirectory);
+        var repair = new PayloadStager(
+            installDirectory,
+            verifyInstalledPayload: true);
+
+        InvalidOperationException exception =
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                () => repair.StageAsync(
+                    fixture.ArchivePath,
+                    fixture.MetadataPath,
+                    CancellationToken.None));
+
+        Assert.Contains(
+            "currently using",
+            exception.Message,
+            StringComparison.Ordinal);
+        Assert.Equal(
+            "damaged",
+            await File.ReadAllTextAsync(
+                Path.Combine(installDirectory, "openclaw.mjs")));
+    }
 
     [Fact]
     public async Task StageAsyncExtractsAndReusesVerifiedPayload()
@@ -117,11 +244,46 @@ public sealed class PayloadStagerTests : IDisposable
         Assert.Equal(staged.PayloadSha256, verified.PayloadSha256);
         Assert.True(verified.Reused);
         Assert.Contains(
-            "Migrated the existing payload inventory to the fast verification marker.",
+            "Migrated the verified payload inventory to the fast marker.",
             messages);
         Assert.True(File.Exists(Path.Combine(
             staged.DirectoryPath,
             ".payload-verified-sha256")));
+    }
+
+    [Fact]
+    public async Task StageAsyncDoesNotBlessCorruptedLegacyPayload()
+    {
+        PackageFixture fixture = await CreatePackageAsync(
+        [
+            new PaxTarEntry(TarEntryType.RegularFile, "openclaw.mjs")
+            {
+                DataStream = TextStream("original")
+            }
+        ]);
+        string installDirectory = Path.Combine(_testDirectory, "app");
+        var stager = new PayloadStager(installDirectory);
+        StagedPayload staged = await stager.StageAsync(
+            fixture.ArchivePath,
+            fixture.MetadataPath,
+            CancellationToken.None);
+        File.Delete(Path.Combine(
+            staged.DirectoryPath,
+            ".payload-verified-sha256"));
+        await File.WriteAllTextAsync(
+            Path.Combine(staged.DirectoryPath, "openclaw.mjs"),
+            "damaged");
+
+        StagedPayload repaired = await stager.StageAsync(
+            fixture.ArchivePath,
+            fixture.MetadataPath,
+            CancellationToken.None);
+
+        Assert.False(repaired.Reused);
+        Assert.Equal(
+            "original",
+            await File.ReadAllTextAsync(
+                Path.Combine(repaired.DirectoryPath, "openclaw.mjs")));
     }
 
     [Fact]

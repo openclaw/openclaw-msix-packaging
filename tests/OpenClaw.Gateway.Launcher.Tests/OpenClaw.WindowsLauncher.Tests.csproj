@@ -21,7 +21,13 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\OpenClaw.Gateway.Launcher\OpenClaw.Gateway.Launcher.csproj" />
+    <ProjectReference Include="..\..\src\OpenClaw.Gateway.Launcher\OpenClaw.WindowsLauncher.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\src\OpenClaw.Gateway.Launcher\Package.appxmanifest"
+          Link="Package.appxmanifest"
+          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

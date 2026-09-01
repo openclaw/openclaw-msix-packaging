@@ -214,7 +214,7 @@ jobs:
         shell: pwsh
         run: |
           dotnet restore `
-            .\src\OpenClaw.Gateway.Launcher\OpenClaw.Gateway.Launcher.csproj `
+            .\src\OpenClaw.Gateway.Launcher\OpenClaw.WindowsLauncher.csproj `
             --runtime 'win-${{ matrix.architecture }}' `
             -p:PublishAot=true `
             -p:IncludePackagingContent=true `
@@ -223,8 +223,8 @@ jobs:
       - name: Compose unsigned MSIX
         shell: pwsh
         run: |
-          $buildComponent = [int64]::Parse('${{ github.run_number }}') % 65536
-          $attemptComponent = [int64]::Parse('${{ github.run_attempt }}') % 65536
+          $buildComponent = [int64]::Parse('${{ github.run_number }}') % 65535
+          $attemptComponent = [int64]::Parse('${{ github.run_attempt }}') % 65535
           $packageVersion = "0.1.$buildComponent.$attemptComponent"
 
           .\scripts\Build-MSIX.ps1 `

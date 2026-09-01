@@ -1,4 +1,4 @@
-namespace OpenClaw.Gateway.Launcher.Tests;
+namespace OpenClaw.WindowsLauncher.Tests;
 
 public sealed class GatewayLauncherTests : IDisposable
 {

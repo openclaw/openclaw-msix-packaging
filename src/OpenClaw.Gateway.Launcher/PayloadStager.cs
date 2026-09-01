@@ -1,11 +1,10 @@
 using System.Formats.Tar;
 using System.Diagnostics;
 using System.IO.Compression;
-using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text.Json;
 
-namespace OpenClaw.Gateway.Launcher;
+namespace OpenClaw.WindowsLauncher;
 
 public sealed class PayloadStager(
     string installDirectory,
@@ -14,8 +13,8 @@ public sealed class PayloadStager(
 {
     private const int MaximumEntryCount = 250_000;
     private const long MaximumExtractedBytes = 8L * 1024 * 1024 * 1024;
-    private const string InventoryFileName = ".payload-inventory.json";
-    private const string VerificationMarkerFileName = ".payload-verified-sha256";
+    internal const string InventoryFileName = ".payload-inventory.json";
+    internal const string VerificationMarkerFileName = ".payload-verified-sha256";
     private static readonly StringComparer PathComparer = StringComparer.OrdinalIgnoreCase;
     private readonly string _installDirectory = Path.GetFullPath(installDirectory);
     private readonly Action<string> _log = log ?? (_ => { });
@@ -37,26 +36,7 @@ public sealed class PayloadStager(
         PayloadMetadata metadata = await PayloadMetadata.LoadAsync(
             fullMetadataPath,
             cancellationToken);
-        string processArchitecture = RuntimeInformation.ProcessArchitecture switch
-        {
-            Architecture.X64 => "x64",
-            Architecture.Arm64 => "arm64",
-            _ => throw new PlatformNotSupportedException(
-                $"Unsupported process architecture: {RuntimeInformation.ProcessArchitecture}.")
-        };
-        if (!string.Equals(
-            metadata.Architecture,
-            processArchitecture,
-            StringComparison.Ordinal))
-        {
-            throw new InvalidDataException(
-                "Payload architecture does not match the host process.");
-        }
-
-        if (!PathComparer.Equals(metadata.Archive, Path.GetFileName(fullPayloadPath)))
-        {
-            throw new InvalidDataException("Payload file name does not match its metadata.");
-        }
+        PayloadMetadata.ValidateForCurrentProcess(metadata, fullPayloadPath);
 
         _log("Verifying packaged payload SHA-256.");
         string actualHash = await ComputeHashAsync(fullPayloadPath, cancellationToken);
@@ -123,16 +103,31 @@ public sealed class PayloadStager(
                             StringComparison.OrdinalIgnoreCase) &&
                         File.Exists(Path.Combine(_installDirectory, "openclaw.mjs")))
                     {
-                        await WriteVerificationMarkerAsync(
-                            _installDirectory,
-                            actualHash,
-                            cancellationToken);
                         _log(
-                            "Migrated the existing payload inventory to the fast verification marker.");
-                        return new StagedPayload(
-                            _installDirectory,
-                            actualHash,
-                            Reused: true);
+                            "The legacy payload inventory matches; verifying files before migration.");
+                        try
+                        {
+                            await VerifyStagedPayloadAsync(
+                                _installDirectory,
+                                actualHash,
+                                fullPayloadPath,
+                                cancellationToken);
+                            await WriteVerificationMarkerAsync(
+                                _installDirectory,
+                                actualHash,
+                                cancellationToken);
+                            _log(
+                                "Migrated the verified payload inventory to the fast marker.");
+                            return new StagedPayload(
+                                _installDirectory,
+                                actualHash,
+                                Reused: true);
+                        }
+                        catch (InvalidDataException exception)
+                        {
+                            _log(
+                                $"The legacy prepared payload requires replacement: {exception.Message}");
+                        }
                     }
 
                     _log(
@@ -167,6 +162,8 @@ public sealed class PayloadStager(
                 }
             }
 
+            using FileStream runtimeLock =
+                PayloadRuntimeLock.AcquireForMutation(_installDirectory);
             _log("Extracting the verified payload. First launch can take several minutes.");
             Directory.CreateDirectory(temporaryDirectory);
             bool promoted = false;
@@ -239,6 +236,63 @@ public sealed class PayloadStager(
         {
             installLock.Dispose();
             _log("Released the installation lock.");
+        }
+    }
+
+    public async Task<PayloadVerification> VerifyAsync(
+        string payloadPath,
+        string metadataPath,
+        CancellationToken cancellationToken)
+    {
+        string fullPayloadPath = Path.GetFullPath(payloadPath);
+        string fullMetadataPath = Path.GetFullPath(metadataPath);
+        if (!File.Exists(fullPayloadPath))
+        {
+            throw new FileNotFoundException(
+                "OpenClaw payload was not found.",
+                fullPayloadPath);
+        }
+
+        _log("Loading payload metadata.");
+        PayloadMetadata metadata = await PayloadMetadata.LoadAsync(
+            fullMetadataPath,
+            cancellationToken);
+        PayloadMetadata.ValidateForCurrentProcess(metadata, fullPayloadPath);
+
+        _log("Verifying packaged payload SHA-256.");
+        string actualHash = await ComputeHashAsync(
+            fullPayloadPath,
+            cancellationToken);
+        if (!string.Equals(
+            actualHash,
+            metadata.Sha256,
+            StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidDataException(
+                "Payload SHA-256 does not match its metadata.");
+        }
+
+        using FileStream runtimeLock =
+            PayloadRuntimeLock.AcquireForVerification(_installDirectory);
+        if (!Directory.Exists(_installDirectory))
+        {
+            return new PayloadVerification(
+                IsValid: false,
+                "Prepared payload directory is missing.");
+        }
+
+        try
+        {
+            await VerifyStagedPayloadAsync(
+                _installDirectory,
+                actualHash,
+                fullPayloadPath,
+                cancellationToken);
+            return new PayloadVerification(IsValid: true, "valid");
+        }
+        catch (InvalidDataException exception)
+        {
+            return new PayloadVerification(IsValid: false, exception.Message);
         }
     }
 
@@ -559,7 +613,7 @@ public sealed class PayloadStager(
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
-    private static async Task<string?> ReadVerificationMarkerAsync(
+    internal static async Task<string?> ReadVerificationMarkerAsync(
         string installDirectory,
         CancellationToken cancellationToken)
     {
@@ -657,3 +711,7 @@ public sealed record StagedPayload(
     string DirectoryPath,
     string PayloadSha256,
     bool Reused);
+
+public sealed record PayloadVerification(
+    bool IsValid,
+    string Detail);

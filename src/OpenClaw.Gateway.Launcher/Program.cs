@@ -1,9 +1,15 @@
-namespace OpenClaw.Gateway.Launcher;
+using System.Reflection;
+
+namespace OpenClaw.WindowsLauncher;
 
 internal static class Program
 {
     public static async Task<int> Main(string[] args)
     {
+        HostEntrypoint entrypoint = HostEntrypointResolver.Resolve();
+        string commandName = entrypoint == HostEntrypoint.Control
+            ? HostEntrypointResolver.ControlCommandName
+            : HostEntrypointResolver.AgentCommandName;
         HostDiagnosticLog? diagnostics = null;
         bool diagnosticWarningWritten = false;
         bool consoleWarningWritten = false;
@@ -37,7 +43,7 @@ internal static class Program
         {
             diagnosticWarningWritten = true;
             WriteConsoleError(
-                $"openclaw: Unable to create diagnostics: {exception.Message}");
+                $"{commandName}: Unable to create diagnostics: {exception.Message}");
         }
 
         void WriteDiagnostic(string message)
@@ -60,7 +66,7 @@ internal static class Program
                 {
                     diagnosticWarningWritten = true;
                     WriteConsoleError(
-                        $"openclaw: Unable to write diagnostics: {exception.Message}");
+                        $"{commandName}: Unable to write diagnostics: {exception.Message}");
                 }
             }
         }
@@ -76,73 +82,22 @@ internal static class Program
                 _ => exception.GetType().Name
             };
 
-        void ReportProgress(string message)
-        {
-            WriteDiagnostic(message);
-            WriteConsoleError($"openclaw: {message}");
-        }
-
         try
         {
-            WriteDiagnostic("Host started.");
-            if (diagnostics is not null)
-            {
-                WriteConsoleError(
-                    $"openclaw: Diagnostics: {diagnostics.Path}");
-            }
-
+            WriteDiagnostic($"Host started through the {commandName} entrypoint.");
             HostOptions options = HostOptions.Parse(args);
-            bool isBootstrapLaunch = options.OpenClawArguments.Count == 0;
-            bool verifyInstalledPayload = false;
-            if (isBootstrapLaunch)
-            {
-                BootstrapAction action = BootstrapConsole.PromptForAction(
-                    options.InstallDirectory,
-                    Console.In,
-                    Console.Out);
-                verifyInstalledPayload = action == BootstrapAction.PrepareFull;
-            }
-
-            var stager = new PayloadStager(
-                options.InstallDirectory,
-                ReportProgress,
-                verifyInstalledPayload);
-            StagedPayload payload = await stager.StageAsync(
-                options.PayloadPath,
-                options.MetadataPath,
-                CancellationToken.None);
-
-            if (isBootstrapLaunch)
-            {
-                BootstrapConsole.WritePreparationSummary(Console.Out, payload);
-                return 0;
-            }
-
-            int exitCode = await GatewayLauncher.RunAsync(
-                options.NodePath,
-                payload.DirectoryPath,
-                options.OpenClawArguments,
-                CancellationToken.None,
-                ReportProgress);
-            if (exitCode == 78)
-            {
-                ReportProgress(
-                    "OpenClaw reported a configuration error (exit code 78). " +
-                    "For first-run setup, run " +
-                    "`openclaw setup --classic --mode local --no-install-daemon`, " +
-                    "then retry.");
-            }
-
-            return exitCode;
+            return entrypoint == HostEntrypoint.Control
+                ? await RunControlAsync(options, args, WriteDiagnostic, WriteConsoleError)
+                : await RunAgentAsync(options, WriteDiagnostic);
         }
         catch (Exception exception)
         {
             WriteDiagnostic($"Unhandled failure: {GetDiagnosticFailure(exception)}");
-            WriteConsoleError($"openclaw: {exception.Message}");
+            WriteConsoleError($"{commandName}: {exception.Message}");
             if (diagnostics is not null)
             {
                 WriteConsoleError(
-                    $"openclaw: See diagnostics: {diagnostics.Path}");
+                    $"{commandName}: See diagnostics: {diagnostics.Path}");
             }
             return 1;
         }
@@ -150,6 +105,89 @@ internal static class Program
         {
             WriteDiagnostic("Host exiting.");
             diagnostics?.Dispose();
+        }
+    }
+
+    private static async Task<int> RunAgentAsync(
+        HostOptions options,
+        Action<string> log)
+    {
+        await PreparedPayloadResolver.ResolveAsync(
+            options,
+            CancellationToken.None);
+        using FileStream runtimeLease = PayloadRuntimeLock.AcquireForLaunch(
+            options.InstallDirectory);
+        string payloadDirectory = await PreparedPayloadResolver.ResolveAsync(
+            options,
+            CancellationToken.None);
+        return await GatewayLauncher.RunAsync(
+            options.NodePath,
+            payloadDirectory,
+            options.OpenClawArguments,
+            CancellationToken.None,
+            log);
+    }
+
+    private static async Task<int> RunControlAsync(
+        HostOptions options,
+        IReadOnlyList<string> args,
+        Action<string> log,
+        Action<string> writeError)
+    {
+        ClawCtlCommandParseResult parsed = ClawCtlCommandParser.Parse(args);
+        if (parsed.Error is not null)
+        {
+            writeError($"clawctl: {parsed.Error}");
+            ClawCtlConsole.WriteUsage(Console.Error);
+            return 2;
+        }
+
+        switch (parsed.Command)
+        {
+            case ClawCtlCommand.Help:
+                ClawCtlConsole.WriteHelp(Console.Out);
+                return 0;
+            case ClawCtlCommand.Version:
+                Console.Out.WriteLine(
+                    Assembly.GetExecutingAssembly().GetName().Version?.ToString() ??
+                    "unknown");
+                return 0;
+            case ClawCtlCommand.Verify:
+            {
+                var verifier = new PayloadStager(options.InstallDirectory, log);
+                PayloadVerification verification = await verifier.VerifyAsync(
+                    options.PayloadPath,
+                    options.MetadataPath,
+                    CancellationToken.None);
+                ClawCtlConsole.WriteVerificationSummary(Console.Out, verification);
+                return verification.IsValid ? 0 : 1;
+            }
+            case ClawCtlCommand.Prepare:
+            case ClawCtlCommand.Repair:
+            {
+                bool repair = parsed.Command == ClawCtlCommand.Repair;
+                void ReportProgress(string message)
+                {
+                    log(message);
+                    writeError($"clawctl: {message}");
+                }
+
+                var stager = new PayloadStager(
+                    options.InstallDirectory,
+                    ReportProgress,
+                    verifyInstalledPayload: repair);
+                StagedPayload payload = await stager.StageAsync(
+                    options.PayloadPath,
+                    options.MetadataPath,
+                    CancellationToken.None);
+                ClawCtlConsole.WritePreparationSummary(
+                    Console.Out,
+                    payload,
+                    repair);
+                return 0;
+            }
+            default:
+                throw new InvalidOperationException("Unknown clawctl command.");
         }
     }
 }

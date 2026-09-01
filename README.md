@@ -1,9 +1,9 @@
-# OpenClaw Gateway MSIX
+# OpenClaw Windows MSIX
 
 This repository builds a Windows MSIX package containing:
 
-- a .NET 10 NativeAOT launcher exposed as the `openclaw` app execution
-  alias;
+- one .NET 10 NativeAOT launcher exposed through the `openclaw` and `clawctl`
+  app execution aliases;
 - a pinned, verified build of
   [`openclaw/openclaw`](https://github.com/openclaw/openclaw);
 - the matching official Node.js runtime for x64 or ARM64.
@@ -12,27 +12,56 @@ The package is independent from the OpenClaw Companion application and uses a
 separate `OpenClaw.Gateway` package identity. Both packages use the OpenClaw
 Foundation publisher metadata established for OpenClaw's Windows packages.
 
-## Launcher behavior
+## Command model
 
-When preparation is required, the host extracts into a temporary directory,
-moves any existing prepared payload aside, and promotes the new payload only
-after extraction and verification succeed. The previous payload is removed
-after successful promotion, preserving rollback if preparation fails.
+Both aliases activate the same packaged `openclaw.exe`. The launcher recovers
+the alias used to start it from the native process command line and selects one
+of two deliberately separate surfaces.
 
-An invocation with no arguments remains the temporary package preparation
-surface. On an existing installation it offers fast verification or full
-verification and repair. This explicit repair path remains until a separate
-management command can replace it.
+### `openclaw`
 
-Every invocation containing arguments is forwarded unchanged to the bundled
-OpenClaw CLI. The launcher does not reserve, consume, reject, or rewrite those
-commands or options, and it does not pause after the OpenClaw process exits.
+`openclaw` is a transparent launcher for the bundled OpenClaw CLI. It does not
+own package-management commands. Every argument, including an empty argument
+list, is forwarded unchanged to `node openclaw.mjs`, and the launcher returns
+the exact child exit code.
+
+The prepared payload must already be current. If it is missing or stale,
+`openclaw` exits with an instruction to run `clawctl prepare`; it does not
+extract, verify, repair, or otherwise change package state.
 
 Every OpenClaw child process runs with
 `OPENCLAW_SUPERVISOR_MODE=external` and `OPENCLAW_NO_AUTO_UPDATE=1`. This makes
 the MSIX package the authoritative owner of Gateway code updates without
 shadowing OpenClaw commands. OpenClaw itself is responsible for enforcing
 those environment flags.
+
+### `clawctl`
+
+`clawctl` owns only the package preparation work that the bundled OpenClaw CLI
+cannot perform itself:
+
+| Command | Behavior |
+|---|---|
+| `clawctl prepare` | Verify the packaged archive and prepare it when missing or outdated. |
+| `clawctl verify` | Deeply verify the prepared payload without changing it. |
+| `clawctl repair` | Deeply verify the prepared payload and recreate it from packaged content when invalid. |
+
+Bare `clawctl` and `clawctl --help` print help without changing state.
+Commands such as `setup`, `doctor`, `gateway`, and `uninstall` belong to the
+OpenClaw CLI and must be invoked through `openclaw`.
+
+Preparation extracts into a temporary directory, moves any existing prepared
+payload aside, and promotes the new payload only after extraction and
+verification succeed. The previous payload is restored if promotion fails.
+Preparation and repair refuse to replace files while a packaged OpenClaw
+process is using the prepared payload.
+
+After installing the MSIX, prepare the payload once before using `openclaw`:
+
+```powershell
+clawctl prepare
+openclaw
+```
 
 ## Selecting the OpenClaw revision
 
@@ -94,9 +123,9 @@ key is stored in the repository.
 
 | Data | Default path |
 |---|---|
-| Prepared gateway files | `%USERPROFILE%\.openclaw-msix\app` |
+| Prepared OpenClaw application files | `%USERPROFILE%\.openclaw-msix\app` |
 | OpenClaw configuration and user state | `%USERPROFILE%\.openclaw` |
-| Launcher diagnostics | `%LOCALAPPDATA%\Packages\<package-family>\LocalState\OpenClawGatewayMSIX\Logs\openclaw.log` |
+| Launcher and package-management diagnostics | `%LOCALAPPDATA%\Packages\<package-family>\LocalState\OpenClawGatewayMSIX\Logs\openclaw.log` |
 
 The prepared gateway and OpenClaw user state are outside the immutable MSIX
 installation directory. Updating or removing the MSIX does not automatically

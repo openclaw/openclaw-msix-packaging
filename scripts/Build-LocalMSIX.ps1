@@ -35,7 +35,7 @@ if (-not $PackageVersion) {
     $now = Get-Date
     $days = [int]($now.Date - [datetime]'2020-01-01').TotalDays
     $timeComponent = (($now.Hour * 3600) + ($now.Minute * 60) + $now.Second) %
-        65536
+        65535
     $PackageVersion = "0.1.$days.$timeComponent"
 }
 
@@ -116,7 +116,7 @@ try {
         -FailureMessage 'Locked dependency restore failed.' `
         -Command {
             & dotnet restore `
-                .\src\OpenClaw.Gateway.Launcher\OpenClaw.Gateway.Launcher.csproj `
+                .\src\OpenClaw.Gateway.Launcher\OpenClaw.WindowsLauncher.csproj `
                 --runtime "win-$Architecture" `
                 -p:PublishAot=true `
                 -p:IncludePackagingContent=true `
