@@ -112,6 +112,11 @@ internal static class Program
         HostOptions options,
         Action<string> log)
     {
+        NodeRuntime nodeRuntime = await NodeRuntimeResolver.ResolveAsync(
+            CancellationToken.None);
+        log(
+            $"Using Node.js {nodeRuntime.Version} from " +
+            $"{nodeRuntime.ExecutablePath}.");
         await PreparedPayloadResolver.ResolveAsync(
             options,
             CancellationToken.None);
@@ -121,7 +126,7 @@ internal static class Program
             options,
             CancellationToken.None);
         return await GatewayLauncher.RunAsync(
-            options.NodePath,
+            nodeRuntime.ExecutablePath,
             payloadDirectory,
             options.OpenClawArguments,
             CancellationToken.None,
@@ -154,6 +159,9 @@ internal static class Program
                 return 0;
             case ClawCtlCommand.Verify:
             {
+                NodeRuntime nodeRuntime = await NodeRuntimeResolver.ResolveAsync(
+                    CancellationToken.None);
+                ClawCtlConsole.WriteNodeRuntimeSummary(Console.Out, nodeRuntime);
                 var verifier = new PayloadStager(options.InstallDirectory, log);
                 PayloadVerification verification = await verifier.VerifyAsync(
                     options.PayloadPath,
@@ -165,6 +173,9 @@ internal static class Program
             case ClawCtlCommand.Prepare:
             case ClawCtlCommand.Repair:
             {
+                NodeRuntime nodeRuntime = await NodeRuntimeResolver.ResolveAsync(
+                    CancellationToken.None);
+                ClawCtlConsole.WriteNodeRuntimeSummary(Console.Out, nodeRuntime);
                 bool repair = parsed.Command == ClawCtlCommand.Repair;
                 void ReportProgress(string message)
                 {

@@ -13,11 +13,26 @@ public static class ClawCtlConsole
         output.WriteLine("  verify    Verify the prepared payload without changing it.");
         output.WriteLine("  repair    Verify and recreate the prepared payload if needed.");
         output.WriteLine();
+        WriteNodePrerequisite(output);
+        output.WriteLine();
         output.WriteLine("Run `openclaw <arguments>` to invoke the OpenClaw CLI.");
     }
 
     public static void WriteUsage(TextWriter output) =>
         output.WriteLine("Usage: clawctl <prepare|verify|repair>");
+
+    public static void WriteNodePrerequisite(TextWriter output)
+    {
+        output.WriteLine(
+            $"Prerequisite: install Node.js {NodeRuntimeResolver.SupportedVersions}.");
+        output.WriteLine($"  {NodeRuntimeResolver.InstallCommand}");
+    }
+
+    internal static void WriteNodeRuntimeSummary(
+        TextWriter output,
+        NodeRuntime runtime) =>
+        output.WriteLine(
+            $"Using Node.js {runtime.Version} from {runtime.ExecutablePath}");
 
     public static void WritePreparationSummary(
         TextWriter output,

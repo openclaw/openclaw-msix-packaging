@@ -15,6 +15,14 @@ public sealed class ClawCtlConsoleTests : IDisposable
         Assert.Contains("prepare", help, StringComparison.Ordinal);
         Assert.Contains("verify", help, StringComparison.Ordinal);
         Assert.Contains("repair", help, StringComparison.Ordinal);
+        Assert.Contains(
+            NodeRuntimeResolver.SupportedVersions,
+            help,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            NodeRuntimeResolver.InstallCommand,
+            help,
+            StringComparison.Ordinal);
         Assert.DoesNotContain("update-package", help, StringComparison.Ordinal);
         Assert.DoesNotContain("gateway-service", help, StringComparison.Ordinal);
     }

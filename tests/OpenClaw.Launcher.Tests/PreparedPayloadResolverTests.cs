@@ -73,7 +73,6 @@ public sealed class PreparedPayloadResolverTests : IDisposable
         return new HostOptions(
             payloadPath,
             metadataPath,
-            "node",
             Path.Combine(_testDirectory, "app"),
             []);
     }

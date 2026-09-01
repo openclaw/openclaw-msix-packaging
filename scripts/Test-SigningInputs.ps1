@@ -74,6 +74,60 @@ function Get-ZipEntrySha256 {
     }
 }
 
+function Assert-ZipPayloadDoesNotBundleNode {
+    param(
+        [Parameter(Mandatory)]
+        [IO.Compression.ZipArchive]$Archive,
+
+        [Parameter(Mandatory)]
+        [string]$Path,
+
+        [Parameter(Mandatory)]
+        [string]$Architecture
+    )
+
+    $entries = @($Archive.Entries | Where-Object {
+        $_.FullName -eq $Path
+    })
+    if ($entries.Count -ne 1) {
+        throw "Expected one '$Path' entry; found $($entries.Count)."
+    }
+
+    $temporaryArchive = Join-Path $env:TEMP (
+        "openclaw-payload-$Architecture-$([guid]::NewGuid().ToString('N')).tar.gz"
+    )
+    $source = $entries[0].Open()
+    $destination = [IO.File]::Create($temporaryArchive)
+    try {
+        $source.CopyTo($destination)
+    }
+    finally {
+        $destination.Dispose()
+        $source.Dispose()
+    }
+
+    try {
+        $payloadEntries = @(& tar -tzf $temporaryArchive)
+        if ($LASTEXITCODE -ne 0) {
+            throw "Unable to inspect the embedded $architecture payload archive."
+        }
+
+        $bundledNodeEntries = @(
+            $payloadEntries |
+                Where-Object {
+                    $_ -match '(^|[\\/])node[.]exe$' -or
+                    [IO.Path]::GetFileName($_) -match '^node-v\d'
+                }
+        )
+        if ($bundledNodeEntries.Count -ne 0) {
+            throw "The embedded $architecture payload bundles Node.js."
+        }
+    }
+    finally {
+        Remove-Item -LiteralPath $temporaryArchive -Force -ErrorAction SilentlyContinue
+    }
+}
+
 $resolvedArtifactsDirectory = (
     Resolve-Path -LiteralPath $ArtifactsDirectory
 ).Path
@@ -154,6 +208,20 @@ foreach ($architecture in @('x64', 'arm64')) {
 
     $packageArchive = [IO.Compression.ZipFile]::OpenRead($msix.FullName)
     try {
+        $bundledNodeEntries = @(
+            $packageArchive.Entries |
+                Where-Object {
+                    -not [string]::IsNullOrEmpty($_.Name) -and
+                    (
+                        $_.Name -ieq 'node.exe' -or
+                        $_.Name -match '^node-v\d'
+                    )
+                }
+        )
+        if ($bundledNodeEntries.Count -ne 0) {
+            throw "The $architecture MSIX bundles Node.js."
+        }
+
         [xml]$manifest = Read-ZipEntryText `
             -Archive $packageArchive `
             -Path 'AppxManifest.xml'
@@ -188,6 +256,10 @@ foreach ($architecture in @('x64', 'arm64')) {
         }
 
         $payloadArchivePath = "payload/$($payloadMetadata.archive)"
+        Assert-ZipPayloadDoesNotBundleNode `
+            -Archive $packageArchive `
+            -Path $payloadArchivePath `
+            -Architecture $architecture
         $actualPayloadHash = Get-ZipEntrySha256 `
             -Archive $packageArchive `
             -Path $payloadArchivePath

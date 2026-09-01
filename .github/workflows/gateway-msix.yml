@@ -230,7 +230,6 @@ jobs:
           .\scripts\Build-MSIX.ps1 `
             -PayloadDirectory '${{ runner.temp }}\openclaw-payload' `
             -Architecture '${{ matrix.architecture }}' `
-            -NodeVersion '${{ env.NODE_VERSION }}' `
             -PackageVersion $packageVersion `
             -SourceCommit '${{ github.sha }}' `
             -OutputDirectory '${{ runner.temp }}\openclaw-msix'

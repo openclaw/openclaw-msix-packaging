@@ -5,8 +5,10 @@ This repository builds a Windows MSIX package containing:
 - one .NET 10 NativeAOT launcher exposed through the `openclaw` and `clawctl`
   app execution aliases;
 - a pinned, verified build of
-  [`openclaw/openclaw`](https://github.com/openclaw/openclaw);
-- the matching official Node.js runtime for x64 or ARM64.
+  [`openclaw/openclaw`](https://github.com/openclaw/openclaw).
+
+Node.js is a device prerequisite and is never downloaded or included in the
+MSIX.
 
 The package is independent from the OpenClaw Companion application and uses a
 separate `OpenClaw.Gateway` package identity. Both packages use the OpenClaw
@@ -24,6 +26,10 @@ of two deliberately separate surfaces.
 own package-management commands. Every argument, including an empty argument
 list, is forwarded unchanged to `node openclaw.mjs`, and the launcher returns
 the exact child exit code.
+
+Before launching, the host discovers `node.exe` on `PATH` and verifies its
+version and executable architecture. It never downloads, installs, or services
+Node.js.
 
 The prepared payload must already be current. If it is missing or stale,
 `openclaw` exits with an instruction to run `clawctl prepare`; it does not
@@ -50,18 +56,29 @@ Bare `clawctl` and `clawctl --help` print help without changing state.
 Commands such as `setup`, `doctor`, `gateway`, and `uninstall` belong to the
 OpenClaw CLI and must be invoked through `openclaw`.
 
+`prepare`, `verify`, and `repair` require a compatible device-installed
+Node.js runtime. Missing, outdated, malformed, or architecture-incompatible
+runtimes produce an actionable error rather than a later process-launch
+failure.
+
 Preparation extracts into a temporary directory, moves any existing prepared
 payload aside, and promotes the new payload only after extraction and
 verification succeed. The previous payload is restored if promotion fails.
 Preparation and repair refuse to replace files while a packaged OpenClaw
 process is using the prepared payload.
 
-After installing the MSIX, prepare the payload once before using `openclaw`:
+Install the current Node.js LTS release, open a new terminal, then prepare the
+payload once before using `openclaw`:
 
 ```powershell
+winget install --id OpenJS.NodeJS.LTS --exact --source winget
 clawctl prepare
 openclaw
 ```
+
+The packaged OpenClaw revision accepts Node.js
+`>=22.22.3 <23 || >=24.15.0 <25 || >=25.9.0`. The launcher keeps this
+requirement in one shared validator used by `clawctl` and `openclaw`.
 
 ## Selecting the OpenClaw revision
 
@@ -98,9 +115,10 @@ dotnet test .\OpenClaw.Gateway.MSIX.slnx `
 
 `scripts\Build-Payload.ps1` turns an OpenClaw npm package into an
 architecture-specific payload. `scripts\Build-MSIX.ps1` verifies that payload,
-downloads and verifies the official Node.js runtime, then creates an unsigned
-NativeAOT MSIX. `scripts\Build-LocalMSIX.ps1` can reuse a successful workflow
-payload or a local payload directory.
+rejects any packaged Node.js executable or runtime archive, then creates an
+unsigned NativeAOT MSIX. `scripts\Build-LocalMSIX.ps1` can reuse a successful
+workflow payload or a local payload directory. The Node.js used by the payload
+build jobs is build infrastructure only and is not copied into the MSIX.
 
 Normal pull-request and push workflows publish unsigned packages for
 validation. Manual runs support three signing modes:

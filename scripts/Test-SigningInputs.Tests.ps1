@@ -24,7 +24,13 @@ function New-TestArtifact {
 
         [string]$PayloadCommit = $approvedCommit,
 
-        [bool]$SourceTreeDirty = $false
+        [bool]$SourceTreeDirty = $false,
+
+        [bool]$IncludeBundledNode = $false,
+
+        [bool]$IncludePayloadBundledNode = $false,
+
+        [bool]$IncludePayloadNodeArchive = $false
     )
 
     $directory = Join-Path $Root $Architecture
@@ -35,10 +41,28 @@ function New-TestArtifact {
 
     $payloadArchiveName = "app-$Architecture.tar.gz"
     $payloadArchivePath = Join-Path $payloadDirectory $payloadArchiveName
-    [IO.File]::WriteAllBytes(
-        $payloadArchivePath,
-        [Text.Encoding]::UTF8.GetBytes("payload-$Architecture")
-    )
+    $payloadContent = Join-Path $Root ".$Architecture-payload"
+    New-Item -Path $payloadContent -ItemType Directory -Force | Out-Null
+    Set-Content `
+        -LiteralPath (Join-Path $payloadContent 'openclaw.mjs') `
+        -Value "payload-$Architecture"
+    if ($IncludePayloadBundledNode) {
+        Set-Content `
+            -LiteralPath (Join-Path $payloadContent 'node.exe') `
+            -Value 'bundled-node'
+    }
+    if ($IncludePayloadNodeArchive) {
+        Set-Content `
+            -LiteralPath (
+                Join-Path $payloadContent 'node-v24.16.0-win-x64.7z'
+            ) `
+            -Value 'bundled-node-archive'
+    }
+    & tar -czf $payloadArchivePath -C $payloadContent .
+    if ($LASTEXITCODE -ne 0) {
+        throw "Unable to create the $Architecture test payload."
+    }
+    Remove-Item -LiteralPath $payloadContent -Recurse -Force
     $payloadHash = (
         Get-FileHash -LiteralPath $payloadArchivePath -Algorithm SHA256
     ).Hash.ToLowerInvariant()
@@ -71,6 +95,14 @@ function New-TestArtifact {
         -LiteralPath (Join-Path $staging 'AppxManifest.xml') `
         -Encoding utf8
 
+    if ($IncludeBundledNode) {
+        $runtimeDirectory = Join-Path $staging 'runtime'
+        New-Item -Path $runtimeDirectory -ItemType Directory | Out-Null
+        Set-Content `
+            -LiteralPath (Join-Path $runtimeDirectory 'node.exe') `
+            -Value 'bundled-node'
+    }
+
     $msixName = "OpenClawGateway-$Architecture.msix"
     $msixPath = Join-Path $directory $msixName
     [IO.Compression.ZipFile]::CreateFromDirectory($staging, $msixPath)
@@ -93,9 +125,6 @@ function New-TestArtifact {
         signed = $false
         packageVersion = '0.1.1.0'
         publisher = $policy.publisher
-        nodeVersion = '24.16.0'
-        nodeArchive = "node-v24.16.0-win-$Architecture.zip"
-        nodeArchiveSha256 = ('2' * 64)
     } |
         ConvertTo-Json |
         Set-Content `
@@ -181,6 +210,45 @@ try {
         -PayloadCommit ('3' * 40)
     Assert-Fails `
         -MessagePattern 'embedded arm64 payload metadata is not approved' `
+        -Action {
+            Invoke-PolicyValidation -Root $testRoot
+        }
+
+    Remove-Item -LiteralPath $testRoot -Recurse -Force
+    New-Item -Path $testRoot -ItemType Directory | Out-Null
+    New-TestArtifact `
+        -Root $testRoot `
+        -Architecture x64 `
+        -IncludeBundledNode $true
+    New-TestArtifact -Root $testRoot -Architecture arm64
+    Assert-Fails `
+        -MessagePattern 'x64 MSIX bundles Node.js' `
+        -Action {
+            Invoke-PolicyValidation -Root $testRoot
+        }
+
+    Remove-Item -LiteralPath $testRoot -Recurse -Force
+    New-Item -Path $testRoot -ItemType Directory | Out-Null
+    New-TestArtifact `
+        -Root $testRoot `
+        -Architecture x64 `
+        -IncludePayloadBundledNode $true
+    New-TestArtifact -Root $testRoot -Architecture arm64
+    Assert-Fails `
+        -MessagePattern 'embedded x64 payload bundles Node.js' `
+        -Action {
+            Invoke-PolicyValidation -Root $testRoot
+        }
+
+    Remove-Item -LiteralPath $testRoot -Recurse -Force
+    New-Item -Path $testRoot -ItemType Directory | Out-Null
+    New-TestArtifact `
+        -Root $testRoot `
+        -Architecture x64 `
+        -IncludePayloadNodeArchive $true
+    New-TestArtifact -Root $testRoot -Architecture arm64
+    Assert-Fails `
+        -MessagePattern 'embedded x64 payload bundles Node.js' `
         -Action {
             Invoke-PolicyValidation -Root $testRoot
         }

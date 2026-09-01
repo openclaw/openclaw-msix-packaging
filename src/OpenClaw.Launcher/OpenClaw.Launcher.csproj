@@ -86,9 +86,6 @@
     <Content Include="$(MSBuildThisFileDirectory)..\..\content\openclaw\payload-metadata.json"
              Link="payload\payload-metadata.json"
              CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="$(MSBuildThisFileDirectory)..\..\content\runtime\$(Platform)\**\*"
-             Link="runtime\%(RecursiveDir)%(Filename)%(Extension)"
-             CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <Target Name="ValidatePackagingContent"
@@ -100,8 +97,6 @@
            Text="Missing content\openclaw\app-arm64.tar.gz." />
     <Error Condition="!Exists('$(MSBuildThisFileDirectory)..\..\content\openclaw\payload-metadata.json')"
            Text="Missing content\openclaw\payload-metadata.json." />
-    <Error Condition="!Exists('$(MSBuildThisFileDirectory)..\..\content\runtime\$(Platform)\node.exe')"
-           Text="Missing verified Node.js runtime content." />
   </Target>
 
   <Target Name="FinalizeNativeAotPackagePayload"

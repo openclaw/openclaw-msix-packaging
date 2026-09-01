@@ -61,6 +61,28 @@ foreach ($requiredPath in @('package.json', 'openclaw.mjs', 'dist')) {
     }
 }
 
+$bundledNodeFiles = @(
+    Get-ChildItem -LiteralPath $installedPackage -File -Recurse |
+        Where-Object {
+            $_.Name -ieq 'node.exe' -or
+            $_.Name -match '^node-v\d'
+        }
+)
+if ($bundledNodeFiles.Count -ne 0) {
+    throw (
+        'The OpenClaw payload must not bundle Node.js: ' +
+        (
+            $bundledNodeFiles |
+                ForEach-Object {
+                    [IO.Path]::GetRelativePath(
+                        $installedPackage,
+                        $_.FullName)
+                } |
+                Sort-Object
+        ) -join ', '
+    )
+}
+
 if ($Architecture -eq 'x64') {
     Push-Location $installedPackage
     try {

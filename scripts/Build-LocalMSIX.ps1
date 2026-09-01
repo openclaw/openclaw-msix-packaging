@@ -137,7 +137,6 @@ try {
     & .\scripts\Build-MSIX.ps1 `
         -PayloadDirectory $resolvedPayloadDirectory `
         -Architecture $Architecture `
-        -NodeVersion 24.16.0 `
         -PackageVersion $PackageVersion `
         -SourceCommit $sourceCommit `
         -SourceTreeDirty:$sourceTreeDirty `
