@@ -27,7 +27,7 @@ $ErrorActionPreference = 'Stop'
 $repositoryRoot = Split-Path $PSScriptRoot -Parent
 $projectPath = Join-Path `
     $repositoryRoot `
-    'src\OpenClaw.Gateway.Launcher\OpenClaw.WindowsLauncher.csproj'
+    'src\OpenClaw.Launcher\OpenClaw.Launcher.csproj'
 $publisher = (
     'CN=OpenClaw Foundation, O=OpenClaw Foundation, L=Mill Valley, ' +
     'S=California, C=US'

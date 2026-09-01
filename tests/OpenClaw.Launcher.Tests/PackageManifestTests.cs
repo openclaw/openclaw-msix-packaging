@@ -1,6 +1,6 @@
 using System.Xml.Linq;
 
-namespace OpenClaw.WindowsLauncher.Tests;
+namespace OpenClaw.Launcher.Tests;
 
 public sealed class PackageManifestTests
 {

@@ -214,7 +214,7 @@ jobs:
         shell: pwsh
         run: |
           dotnet restore `
-            .\src\OpenClaw.Gateway.Launcher\OpenClaw.WindowsLauncher.csproj `
+            .\src\OpenClaw.Launcher\OpenClaw.Launcher.csproj `
             --runtime 'win-${{ matrix.architecture }}' `
             -p:PublishAot=true `
             -p:IncludePackagingContent=true `

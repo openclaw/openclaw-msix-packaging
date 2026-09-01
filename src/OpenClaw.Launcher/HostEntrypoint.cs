@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace OpenClaw.WindowsLauncher;
+namespace OpenClaw.Launcher;
 
 internal enum HostEntrypoint
 {

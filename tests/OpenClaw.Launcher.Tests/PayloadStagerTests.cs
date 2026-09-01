@@ -5,7 +5,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-namespace OpenClaw.WindowsLauncher.Tests;
+namespace OpenClaw.Launcher.Tests;
 
 public sealed class PayloadStagerTests : IDisposable
 {

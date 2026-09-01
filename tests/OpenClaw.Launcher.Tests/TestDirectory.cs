@@ -1,4 +1,4 @@
-namespace OpenClaw.WindowsLauncher.Tests;
+namespace OpenClaw.Launcher.Tests;
 
 internal static class TestDirectory
 {

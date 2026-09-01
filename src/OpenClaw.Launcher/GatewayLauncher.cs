@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace OpenClaw.WindowsLauncher;
+namespace OpenClaw.Launcher;
 
 public static class GatewayLauncher
 {

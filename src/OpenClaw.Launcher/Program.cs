@@ -1,6 +1,6 @@
 using System.Reflection;
 
-namespace OpenClaw.WindowsLauncher;
+namespace OpenClaw.Launcher;
 
 internal static class Program
 {

@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace OpenClaw.WindowsLauncher;
+namespace OpenClaw.Launcher;
 
 [JsonSerializable(typeof(PayloadMetadata))]
 [JsonSerializable(typeof(PayloadInventory))]

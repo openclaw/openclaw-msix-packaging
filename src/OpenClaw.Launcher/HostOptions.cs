@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace OpenClaw.WindowsLauncher;
+namespace OpenClaw.Launcher;
 
 public sealed record HostOptions(
     string PayloadPath,

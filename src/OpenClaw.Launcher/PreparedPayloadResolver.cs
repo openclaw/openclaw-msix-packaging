@@ -1,4 +1,4 @@
-namespace OpenClaw.WindowsLauncher;
+namespace OpenClaw.Launcher;
 
 internal static class PreparedPayloadResolver
 {

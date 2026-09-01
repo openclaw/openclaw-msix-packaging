@@ -1,7 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Text.Json;
 
-namespace OpenClaw.WindowsLauncher.Tests;
+namespace OpenClaw.Launcher.Tests;
 
 public sealed class PreparedPayloadResolverTests : IDisposable
 {

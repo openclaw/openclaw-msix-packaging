@@ -1,4 +1,4 @@
-namespace OpenClaw.WindowsLauncher;
+namespace OpenClaw.Launcher;
 
 public static class ClawCtlConsole
 {

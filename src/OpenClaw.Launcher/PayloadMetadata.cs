@@ -2,7 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Runtime.InteropServices;
 
-namespace OpenClaw.WindowsLauncher;
+namespace OpenClaw.Launcher;
 
 public sealed record PayloadMetadata(
     [property: JsonPropertyName("repository")] string Repository,
