@@ -21,8 +21,8 @@ public sealed class ProgramTests : IDisposable
                     _ =>
                     {
                         nodeResolutionAttempted = true;
-                        throw new InvalidOperationException(
-                            "Node resolution should not run.");
+                        return Task.FromException<NodeRuntime>(
+                            new InvalidOperationException("Node resolution should not run."));
                     }));
 
         Assert.False(nodeResolutionAttempted);
