@@ -19,8 +19,11 @@ internal static class PreparedPayloadResolver
             metadata.Sha256,
             StringComparison.OrdinalIgnoreCase))
         {
+            string state = verifiedHash is null
+                ? "not prepared or is incomplete"
+                : "out of date for the installed package";
             throw new InvalidOperationException(
-                "The packaged OpenClaw payload is not prepared. " +
+                $"The packaged OpenClaw payload is {state}. " +
                 "Run `clawctl prepare`, then retry.");
         }
 

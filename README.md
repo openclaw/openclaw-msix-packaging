@@ -35,6 +35,21 @@ The prepared payload must already be current. If it is missing or stale,
 `openclaw` exits with an instruction to run `clawctl prepare`; it does not
 extract, verify, repair, or otherwise change package state.
 
+This manual preparation contract is intentional and maintainer-approved. On a
+fresh installation, the first `openclaw` invocation reports that preparation is
+required. After an MSIX update changes the packaged payload, the existing
+verification marker no longer matches and `openclaw` reports that the prepared
+payload is out of date. In both cases, the user runs:
+
+```powershell
+clawctl prepare
+```
+
+These readiness checks and actionable guidance are the only package-specific
+behavior in the `openclaw` entrypoint. Once the prepared payload and external
+Node.js prerequisite are valid, all arguments are passed through unchanged and
+the child process exit code is returned unchanged.
+
 Every OpenClaw child process runs with
 `OPENCLAW_SUPERVISOR_MODE=external` and `OPENCLAW_NO_AUTO_UPDATE=1`. This makes
 the MSIX package the authoritative owner of Gateway code updates without

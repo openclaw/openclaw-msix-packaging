@@ -41,6 +41,45 @@ public sealed class PreparedPayloadResolverTests : IDisposable
                     CancellationToken.None));
 
         Assert.Contains(
+            "not prepared or is incomplete",
+            exception.Message,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "clawctl prepare",
+            exception.Message,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ResolveAsyncDirectsTheUserToClawCtlWhenPayloadIsOutdated()
+    {
+        HostOptions options = await CreateOptionsAsync();
+        Directory.CreateDirectory(options.InstallDirectory);
+        await File.WriteAllTextAsync(
+            Path.Combine(options.InstallDirectory, "openclaw.mjs"),
+            "fixture");
+        await File.WriteAllTextAsync(
+            Path.Combine(
+                options.InstallDirectory,
+                PayloadStager.InventoryFileName),
+            "{}");
+        await File.WriteAllTextAsync(
+            Path.Combine(
+                options.InstallDirectory,
+                PayloadStager.VerificationMarkerFileName),
+            new string('c', 64));
+
+        InvalidOperationException exception =
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                () => PreparedPayloadResolver.ResolveAsync(
+                    options,
+                    CancellationToken.None));
+
+        Assert.Contains(
+            "out of date for the installed package",
+            exception.Message,
+            StringComparison.Ordinal);
+        Assert.Contains(
             "clawctl prepare",
             exception.Message,
             StringComparison.Ordinal);

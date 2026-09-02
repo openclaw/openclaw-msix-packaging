@@ -108,18 +108,20 @@ internal static class Program
         }
     }
 
-    private static async Task<int> RunAgentAsync(
+    internal static async Task<int> RunAgentAsync(
         HostOptions options,
-        Action<string> log)
+        Action<string> log,
+        Func<CancellationToken, Task<NodeRuntime>>? resolveNode = null)
     {
-        NodeRuntime nodeRuntime = await NodeRuntimeResolver.ResolveAsync(
-            CancellationToken.None);
-        log(
-            $"Using Node.js {nodeRuntime.Version} from " +
-            $"{nodeRuntime.ExecutablePath}.");
         await PreparedPayloadResolver.ResolveAsync(
             options,
             CancellationToken.None);
+        NodeRuntime nodeRuntime = await (
+            resolveNode ?? NodeRuntimeResolver.ResolveAsync)(
+                CancellationToken.None);
+        log(
+            $"Using Node.js {nodeRuntime.Version} from " +
+            $"{nodeRuntime.ExecutablePath}.");
         using FileStream runtimeLease = PayloadRuntimeLock.AcquireForLaunch(
             options.InstallDirectory);
         string payloadDirectory = await PreparedPayloadResolver.ResolveAsync(
