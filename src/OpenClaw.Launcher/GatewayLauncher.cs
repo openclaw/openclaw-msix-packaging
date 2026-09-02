@@ -54,13 +54,12 @@ public static class GatewayLauncher
         var startInfo = new ProcessStartInfo
         {
             FileName = nodePath,
-            WorkingDirectory = payloadDirectory,
             UseShellExecute = false,
             RedirectStandardInput = false,
             RedirectStandardOutput = false,
             RedirectStandardError = false
         };
-        startInfo.Environment["OPENCLAW_SUPERVISOR_MODE"] = "external";
+        startInfo.Environment["OPENCLAW_SERVICE_REPAIR_POLICY"] = "external";
         startInfo.Environment["OPENCLAW_NO_AUTO_UPDATE"] = "1";
         startInfo.ArgumentList.Add(entryPoint);
 

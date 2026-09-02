@@ -2,23 +2,19 @@ using System.Formats.Tar;
 using System.Diagnostics;
 using System.IO.Compression;
 using System.Security.Cryptography;
-using System.Text.Json;
 
 namespace OpenClaw.Launcher;
 
 public sealed class PayloadStager(
     string installDirectory,
-    Action<string>? log = null,
-    bool verifyInstalledPayload = false)
+    Action<string>? log = null)
 {
     private const int MaximumEntryCount = 250_000;
     private const long MaximumExtractedBytes = 8L * 1024 * 1024 * 1024;
-    internal const string InventoryFileName = ".payload-inventory.json";
     internal const string VerificationMarkerFileName = ".payload-verified-sha256";
     private static readonly StringComparer PathComparer = StringComparer.OrdinalIgnoreCase;
     private readonly string _installDirectory = Path.GetFullPath(installDirectory);
     private readonly Action<string> _log = log ?? (_ => { });
-    private readonly bool _verifyInstalledPayload = verifyInstalledPayload;
 
     public async Task<StagedPayload> StageAsync(
         string payloadPath,
@@ -77,89 +73,21 @@ public sealed class PayloadStager(
                 string? verifiedPayloadHash = await ReadVerificationMarkerAsync(
                     _installDirectory,
                     cancellationToken);
-                if (!_verifyInstalledPayload)
+                if (string.Equals(
+                    verifiedPayloadHash,
+                    actualHash,
+                    StringComparison.OrdinalIgnoreCase))
                 {
-                    if (string.Equals(
-                        verifiedPayloadHash,
-                        actualHash,
-                        StringComparison.OrdinalIgnoreCase))
-                    {
-                        _log(
-                            "The installed payload marker matches; skipping full per-file verification.");
-                        return new StagedPayload(
-                            _installDirectory,
-                            actualHash,
-                            Reused: true);
-                    }
-
-                    string? inventoryPayloadHash =
-                        await ReadInstalledInventoryPayloadHashAsync(
-                            _installDirectory,
-                            cancellationToken);
-                    if (verifiedPayloadHash is null &&
-                        string.Equals(
-                            inventoryPayloadHash,
-                            actualHash,
-                            StringComparison.OrdinalIgnoreCase) &&
-                        File.Exists(Path.Combine(_installDirectory, "openclaw.mjs")))
-                    {
-                        _log(
-                            "The legacy payload inventory matches; verifying files before migration.");
-                        try
-                        {
-                            await VerifyStagedPayloadAsync(
-                                _installDirectory,
-                                actualHash,
-                                fullPayloadPath,
-                                cancellationToken);
-                            await WriteVerificationMarkerAsync(
-                                _installDirectory,
-                                actualHash,
-                                cancellationToken);
-                            _log(
-                                "Migrated the verified payload inventory to the fast marker.");
-                            return new StagedPayload(
-                                _installDirectory,
-                                actualHash,
-                                Reused: true);
-                        }
-                        catch (InvalidDataException exception)
-                        {
-                            _log(
-                                $"The legacy prepared payload requires replacement: {exception.Message}");
-                        }
-                    }
-
                     _log(
-                        "The packaged payload or installed inventory changed; replacing the " +
-                        "installed payload without re-hashing the old version.");
+                        "The installed payload marker matches; preserving user changes.");
+                    return new StagedPayload(
+                        _installDirectory,
+                        actualHash,
+                        Reused: true);
                 }
-                else
-                {
-                    _log("Full installed-payload verification was requested.");
-                    try
-                    {
-                        await VerifyStagedPayloadAsync(
-                            _installDirectory,
-                            actualHash,
-                            fullPayloadPath,
-                            cancellationToken);
-                        await WriteVerificationMarkerAsync(
-                            _installDirectory,
-                            actualHash,
-                            cancellationToken);
-                        _log("The existing installed payload is valid and will be reused.");
-                        return new StagedPayload(
-                            _installDirectory,
-                            actualHash,
-                            Reused: true);
-                    }
-                    catch (InvalidDataException exception)
-                    {
-                        _log(
-                            $"The existing installed payload requires repair: {exception.Message}");
-                    }
-                }
+
+                _log(
+                    "The packaged payload changed; replacing the installed payload.");
             }
 
             using FileStream runtimeLock =
@@ -169,27 +97,13 @@ public sealed class PayloadStager(
             bool promoted = false;
             try
             {
-                IReadOnlyList<PayloadInventoryEntry> entries = await ReadPayloadAsync(
+                int extractedFileCount = await ReadPayloadAsync(
                     fullPayloadPath,
                     temporaryDirectory,
                     cancellationToken);
-                _log($"Extracted and hashed {entries.Count} payload files.");
+                _log($"Extracted {extractedFileCount} payload files.");
                 EnsureOpenClawEntryPoint(temporaryDirectory);
 
-                var inventory = new PayloadInventory(actualHash, entries);
-                string inventoryPath = Path.Combine(temporaryDirectory, InventoryFileName);
-                await using (FileStream inventoryStream = new(
-                    inventoryPath,
-                    FileMode.CreateNew,
-                    FileAccess.Write,
-                    FileShare.None))
-                {
-                    await JsonSerializer.SerializeAsync(
-                        inventoryStream,
-                        inventory,
-                        OpenClawJsonContext.Default.PayloadInventory,
-                        cancellationToken);
-                }
                 await WriteVerificationMarkerAsync(
                     temporaryDirectory,
                     actualHash,
@@ -239,63 +153,6 @@ public sealed class PayloadStager(
         }
     }
 
-    public async Task<PayloadVerification> VerifyAsync(
-        string payloadPath,
-        string metadataPath,
-        CancellationToken cancellationToken)
-    {
-        string fullPayloadPath = Path.GetFullPath(payloadPath);
-        string fullMetadataPath = Path.GetFullPath(metadataPath);
-        if (!File.Exists(fullPayloadPath))
-        {
-            throw new FileNotFoundException(
-                "OpenClaw payload was not found.",
-                fullPayloadPath);
-        }
-
-        _log("Loading payload metadata.");
-        PayloadMetadata metadata = await PayloadMetadata.LoadAsync(
-            fullMetadataPath,
-            cancellationToken);
-        PayloadMetadata.ValidateForCurrentProcess(metadata, fullPayloadPath);
-
-        _log("Verifying packaged payload SHA-256.");
-        string actualHash = await ComputeHashAsync(
-            fullPayloadPath,
-            cancellationToken);
-        if (!string.Equals(
-            actualHash,
-            metadata.Sha256,
-            StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidDataException(
-                "Payload SHA-256 does not match its metadata.");
-        }
-
-        using FileStream runtimeLock =
-            PayloadRuntimeLock.AcquireForVerification(_installDirectory);
-        if (!Directory.Exists(_installDirectory))
-        {
-            return new PayloadVerification(
-                IsValid: false,
-                "Prepared payload directory is missing.");
-        }
-
-        try
-        {
-            await VerifyStagedPayloadAsync(
-                _installDirectory,
-                actualHash,
-                fullPayloadPath,
-                cancellationToken);
-            return new PayloadVerification(IsValid: true, "valid");
-        }
-        catch (InvalidDataException exception)
-        {
-            return new PayloadVerification(IsValid: false, exception.Message);
-        }
-    }
-
     private static void RecoverInterruptedPromotion(
         string installDirectory,
         string temporaryDirectory,
@@ -314,19 +171,17 @@ public sealed class PayloadStager(
         }
     }
 
-    private static async Task<IReadOnlyList<PayloadInventoryEntry>> ReadPayloadAsync(
+    private static async Task<int> ReadPayloadAsync(
         string payloadPath,
-        string? destinationRoot,
+        string destinationRoot,
         CancellationToken cancellationToken)
     {
-        string? rootPrefix = destinationRoot is null
-            ? null
-            : Path.GetFullPath(destinationRoot)
-                .TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        string rootPrefix = Path.GetFullPath(destinationRoot)
+            .TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
         var seenPaths = new HashSet<string>(PathComparer);
-        var inventory = new List<PayloadInventoryEntry>();
         long extractedBytes = 0;
         int entryCount = 0;
+        int extractedFileCount = 0;
 
         await using FileStream payloadStream = File.OpenRead(payloadPath);
         await using var gzipStream = new GZipStream(
@@ -352,11 +207,11 @@ public sealed class PayloadStager(
                 continue;
             }
 
-            string? destinationPath = destinationRoot is null
-                ? null
-                : Path.GetFullPath(Path.Combine(destinationRoot, relativePath));
-            if (destinationPath is not null &&
-                !destinationPath.StartsWith(rootPrefix!, StringComparison.OrdinalIgnoreCase))
+            string destinationPath = Path.GetFullPath(
+                Path.Combine(destinationRoot, relativePath));
+            if (!destinationPath.StartsWith(
+                    rootPrefix,
+                    StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidDataException(
                     $"Payload entry escapes the staging directory: {entry.Name}");
@@ -365,10 +220,7 @@ public sealed class PayloadStager(
             switch (entry.EntryType)
             {
                 case TarEntryType.Directory:
-                    if (destinationPath is not null)
-                    {
-                        Directory.CreateDirectory(destinationPath);
-                    }
+                    Directory.CreateDirectory(destinationPath);
                     break;
                 case TarEntryType.RegularFile:
                 case TarEntryType.V7RegularFile:
@@ -390,45 +242,27 @@ public sealed class PayloadStager(
                             $"Payload file has no data stream: {entry.Name}");
                     }
 
-                    string hash;
-                    if (destinationPath is null)
+                    string? parentDirectory = Path.GetDirectoryName(destinationPath);
+                    if (parentDirectory is not null)
                     {
-                        byte[] contentHash = entry.DataStream is null
-                            ? SHA256.HashData(Array.Empty<byte>())
-                            : await SHA256.HashDataAsync(
-                                entry.DataStream,
+                        Directory.CreateDirectory(parentDirectory);
+                    }
+
+                    await using (FileStream output = new(
+                        destinationPath,
+                        FileMode.CreateNew,
+                        FileAccess.Write,
+                        FileShare.None))
+                    {
+                        if (entry.DataStream is not null)
+                        {
+                            await entry.DataStream.CopyToAsync(
+                                output,
                                 cancellationToken);
-                        hash = Convert.ToHexString(contentHash).ToLowerInvariant();
-                    }
-                    else
-                    {
-                        string? parentDirectory = Path.GetDirectoryName(destinationPath);
-                        if (parentDirectory is not null)
-                        {
-                            Directory.CreateDirectory(parentDirectory);
                         }
-
-                        await using (FileStream output = new(
-                            destinationPath,
-                            FileMode.CreateNew,
-                            FileAccess.Write,
-                            FileShare.None))
-                        {
-                            if (entry.DataStream is not null)
-                            {
-                                await entry.DataStream.CopyToAsync(
-                                    output,
-                                    cancellationToken);
-                            }
-                        }
-
-                        hash = await ComputeHashAsync(destinationPath, cancellationToken);
                     }
 
-                    inventory.Add(new PayloadInventoryEntry(
-                        ToArchivePath(relativePath),
-                        entry.Length,
-                        hash));
+                    extractedFileCount++;
                     break;
                 default:
                     throw new InvalidDataException(
@@ -436,114 +270,7 @@ public sealed class PayloadStager(
             }
         }
 
-        return inventory.OrderBy(item => item.Path, PathComparer).ToArray();
-    }
-
-    private static async Task VerifyStagedPayloadAsync(
-        string versionDirectory,
-        string expectedPayloadHash,
-        string payloadPath,
-        CancellationToken cancellationToken)
-    {
-        string inventoryPath = Path.Combine(versionDirectory, InventoryFileName);
-        if (!File.Exists(inventoryPath))
-        {
-            throw new InvalidDataException("Staged payload inventory is missing.");
-        }
-
-        PayloadInventory? inventory;
-        try
-        {
-            await using FileStream stream = File.OpenRead(inventoryPath);
-            inventory = await JsonSerializer.DeserializeAsync(
-                stream,
-                OpenClawJsonContext.Default.PayloadInventory,
-                cancellationToken);
-        }
-        catch (JsonException exception)
-        {
-            throw new InvalidDataException(
-                "Staged payload inventory is malformed.",
-                exception);
-        }
-
-        if (inventory is null ||
-            inventory.Files is null ||
-            !string.Equals(
-                inventory.PayloadSha256,
-                expectedPayloadHash,
-                StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidDataException("Staged payload inventory is invalid.");
-        }
-
-        IReadOnlyList<PayloadInventoryEntry> trustedFiles = await ReadPayloadAsync(
-            payloadPath,
-            destinationRoot: null,
-            cancellationToken);
-        var trustedByPath = trustedFiles.ToDictionary(item => item.Path, PathComparer);
-        if (inventory.Files.Count != trustedFiles.Count ||
-            inventory.Files.Any(item =>
-                item.Path is null ||
-                !trustedByPath.TryGetValue(item.Path, out PayloadInventoryEntry? trusted) ||
-                item.Length != trusted.Length ||
-                !string.Equals(
-                    item.Sha256,
-                    trusted.Sha256,
-                    StringComparison.OrdinalIgnoreCase)))
-        {
-            throw new InvalidDataException("Staged payload inventory is invalid.");
-        }
-
-        var expectedFiles = new HashSet<string>(
-            trustedFiles.Select(item => item.Path),
-            PathComparer);
-        foreach (string filePath in Directory.EnumerateFiles(
-            versionDirectory,
-            "*",
-            SearchOption.AllDirectories))
-        {
-            string relativePath = ToArchivePath(
-                Path.GetRelativePath(versionDirectory, filePath));
-            if (PathComparer.Equals(relativePath, InventoryFileName))
-            {
-                continue;
-            }
-            if (PathComparer.Equals(relativePath, VerificationMarkerFileName))
-            {
-                continue;
-            }
-
-            if (!expectedFiles.Remove(relativePath))
-            {
-                throw new InvalidDataException(
-                    $"Staged payload contains an unexpected file: {relativePath}");
-            }
-        }
-
-        if (expectedFiles.Count > 0)
-        {
-            throw new InvalidDataException("Staged payload is missing one or more files.");
-        }
-
-        foreach (PayloadInventoryEntry item in trustedFiles)
-        {
-            string filePath = Path.Combine(
-                versionDirectory,
-                item.Path.Replace('/', Path.DirectorySeparatorChar));
-            var fileInfo = new FileInfo(filePath);
-            if (fileInfo.Length != item.Length ||
-                !string.Equals(
-                    await ComputeHashAsync(filePath, cancellationToken),
-                    item.Sha256,
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidDataException(
-                    $"Staged payload file failed verification: {item.Path}");
-            }
-        }
-
-        EnsureOpenClawEntryPoint(versionDirectory);
+        return extractedFileCount;
     }
 
     private static string NormalizeEntryPath(string entryName)
@@ -620,56 +347,8 @@ public sealed class PayloadStager(
         string markerPath = Path.Combine(
             installDirectory,
             VerificationMarkerFileName);
-        string inventoryPath = Path.Combine(
-            installDirectory,
-            InventoryFileName);
         if (!File.Exists(markerPath) ||
-            !File.Exists(inventoryPath) ||
             !File.Exists(Path.Combine(installDirectory, "openclaw.mjs")))
-        {
-            return null;
-        }
-
-        PayloadInventory? inventory;
-        try
-        {
-            await using FileStream stream = File.OpenRead(inventoryPath);
-            inventory = await JsonSerializer.DeserializeAsync(
-                stream,
-                OpenClawJsonContext.Default.PayloadInventory,
-                cancellationToken);
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
-
-        if (inventory?.Files is not { Count: > 0 })
-        {
-            return null;
-        }
-
-        try
-        {
-            foreach (PayloadInventoryEntry item in inventory.Files)
-            {
-                if (string.IsNullOrEmpty(item.Path))
-                {
-                    return null;
-                }
-
-                string normalizedPath = NormalizeEntryPath(item.Path);
-                if (!string.Equals(
-                        ToArchivePath(normalizedPath),
-                        item.Path,
-                        StringComparison.Ordinal) ||
-                    !File.Exists(Path.Combine(installDirectory, normalizedPath)))
-                {
-                    return null;
-                }
-            }
-        }
-        catch (InvalidDataException)
         {
             return null;
         }
@@ -681,39 +360,6 @@ public sealed class PayloadStager(
         return value.Length == 64 && value.All(Uri.IsHexDigit)
             ? value
             : null;
-    }
-
-    private static async Task<string?> ReadInstalledInventoryPayloadHashAsync(
-        string installDirectory,
-        CancellationToken cancellationToken)
-    {
-        string inventoryPath = Path.Combine(installDirectory, InventoryFileName);
-        if (!File.Exists(inventoryPath))
-        {
-            return null;
-        }
-
-        try
-        {
-            await using FileStream stream = File.OpenRead(inventoryPath);
-            PayloadInventory? inventory =
-                await JsonSerializer.DeserializeAsync(
-                    stream,
-                    OpenClawJsonContext.Default.PayloadInventory,
-                    cancellationToken);
-            return inventory is not null &&
-                inventory.Files is not null &&
-                inventory.Files.Count > 0 &&
-                !string.IsNullOrEmpty(inventory.PayloadSha256) &&
-                inventory.PayloadSha256.Length == 64 &&
-                inventory.PayloadSha256.All(Uri.IsHexDigit)
-                    ? inventory.PayloadSha256
-                    : null;
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
     }
 
     private static async Task WriteVerificationMarkerAsync(
@@ -732,9 +378,6 @@ public sealed class PayloadStager(
         File.Move(temporaryMarkerPath, markerPath, overwrite: true);
     }
 
-    private static string ToArchivePath(string path) =>
-        path.Replace(Path.DirectorySeparatorChar, '/');
-
     private static void DeleteDirectory(string path)
     {
         if (Directory.Exists(path))
@@ -745,20 +388,7 @@ public sealed class PayloadStager(
 
 }
 
-internal sealed record PayloadInventory(
-    string PayloadSha256,
-    IReadOnlyList<PayloadInventoryEntry> Files);
-
-internal sealed record PayloadInventoryEntry(
-    string Path,
-    long Length,
-    string Sha256);
-
 public sealed record StagedPayload(
     string DirectoryPath,
     string PayloadSha256,
     bool Reused);
-
-public sealed record PayloadVerification(
-    bool IsValid,
-    string Detail);

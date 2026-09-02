@@ -16,19 +16,8 @@ public sealed class PreparedPayloadResolverTests : IDisposable
             Path.Combine(options.InstallDirectory, "openclaw.mjs"),
             "fixture");
         await File.WriteAllTextAsync(
-            Path.Combine(options.InstallDirectory, ".payload-inventory.json"),
-            """
-            {
-              "PayloadSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-              "Files": [
-                {
-                  "Path": "openclaw.mjs",
-                  "Length": 7,
-                  "Sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-                }
-              ]
-            }
-            """);
+            Path.Combine(options.InstallDirectory, "AGENTS.md"),
+            "user-created");
         await File.WriteAllTextAsync(
             Path.Combine(options.InstallDirectory, ".payload-verified-sha256"),
             new string('b', 64));
@@ -41,7 +30,7 @@ public sealed class PreparedPayloadResolverTests : IDisposable
     }
 
     [Fact]
-    public async Task ResolveAsyncDirectsTheUserToClawCtlWhenListedFileIsMissing()
+    public async Task ResolveAsyncAllowsArbitraryPreparedPayloadChanges()
     {
         HostOptions options = await CreateOptionsAsync();
         Directory.CreateDirectory(options.InstallDirectory);
@@ -52,45 +41,21 @@ public sealed class PreparedPayloadResolverTests : IDisposable
             Path.Combine(options.InstallDirectory, "required-module.mjs"),
             "fixture");
         await File.WriteAllTextAsync(
-            Path.Combine(options.InstallDirectory, ".payload-inventory.json"),
-            """
-            {
-              "PayloadSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-              "Files": [
-                {
-                  "Path": "openclaw.mjs",
-                  "Length": 7,
-                  "Sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-                },
-                {
-                  "Path": "required-module.mjs",
-                  "Length": 7,
-                  "Sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-                }
-              ]
-            }
-            """);
-        await File.WriteAllTextAsync(
             Path.Combine(options.InstallDirectory, ".payload-verified-sha256"),
             new string('b', 64));
         File.Delete(Path.Combine(
             options.InstallDirectory,
             "required-module.mjs"));
 
-        InvalidOperationException exception =
-            await Assert.ThrowsAsync<InvalidOperationException>(
-                () => PreparedPayloadResolver.ResolveAsync(
-                    options,
-                    CancellationToken.None));
+        await File.WriteAllTextAsync(
+            Path.Combine(options.InstallDirectory, "AGENTS.md"),
+            "user-created");
 
-        Assert.Contains(
-            "not prepared or is incomplete",
-            exception.Message,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "clawctl prepare",
-            exception.Message,
-            StringComparison.Ordinal);
+        string resolved = await PreparedPayloadResolver.ResolveAsync(
+            options,
+            CancellationToken.None);
+
+        Assert.Equal(options.InstallDirectory, resolved);
     }
 
     [Fact]
@@ -122,22 +87,6 @@ public sealed class PreparedPayloadResolverTests : IDisposable
         await File.WriteAllTextAsync(
             Path.Combine(options.InstallDirectory, "openclaw.mjs"),
             "fixture");
-        await File.WriteAllTextAsync(
-            Path.Combine(
-                options.InstallDirectory,
-                PayloadStager.InventoryFileName),
-            """
-            {
-              "PayloadSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-              "Files": [
-                {
-                  "Path": "openclaw.mjs",
-                  "Length": 7,
-                  "Sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-                }
-              ]
-            }
-            """);
         await File.WriteAllTextAsync(
             Path.Combine(
                 options.InstallDirectory,

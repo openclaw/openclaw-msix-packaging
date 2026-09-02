@@ -45,7 +45,7 @@ public sealed class PayloadRuntimeLockTests : IDisposable
             () => PayloadRuntimeLock.AcquireForLaunch(installDirectory));
 
         Assert.Contains(
-            "being prepared or repaired",
+            "being prepared",
             exception.Message,
             StringComparison.Ordinal);
     }

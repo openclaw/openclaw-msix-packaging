@@ -13,8 +13,8 @@ public sealed class ClawCtlConsoleTests : IDisposable
 
         string help = output.ToString();
         Assert.Contains("prepare", help, StringComparison.Ordinal);
-        Assert.Contains("verify", help, StringComparison.Ordinal);
-        Assert.Contains("repair", help, StringComparison.Ordinal);
+        Assert.DoesNotContain("verify", help, StringComparison.Ordinal);
+        Assert.DoesNotContain("repair", help, StringComparison.Ordinal);
         Assert.Contains(
             NodeRuntimeResolver.SupportedVersions,
             help,
@@ -28,13 +28,10 @@ public sealed class ClawCtlConsoleTests : IDisposable
     }
 
     [Theory]
-    [InlineData(true, false, "current and was reused")]
-    [InlineData(false, false, "verified and prepared")]
-    [InlineData(true, true, "passed full verification")]
-    [InlineData(false, true, "recreated from packaged content")]
+    [InlineData(true, "current and was reused")]
+    [InlineData(false, "verified and prepared")]
     public void WritePreparationSummaryDescribesResult(
         bool reused,
-        bool repair,
         string expectedStatus)
     {
         var output = new StringWriter();
@@ -44,8 +41,7 @@ public sealed class ClawCtlConsoleTests : IDisposable
             new StagedPayload(
                 Path.Combine(_testDirectory, "app"),
                 new string('a', 64),
-                reused),
-            repair);
+                reused));
 
         Assert.Contains(
             expectedStatus,

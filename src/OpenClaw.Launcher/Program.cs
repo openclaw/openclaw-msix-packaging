@@ -113,6 +113,13 @@ internal static class Program
         Action<string> log,
         Func<CancellationToken, Task<NodeRuntime>>? resolveNode = null)
     {
+        if (IsUpstreamUpdateCommand(options.OpenClawArguments))
+        {
+            throw new InvalidOperationException(
+                "OpenClaw updates are managed by the installed MSIX package. " +
+                "Update the app through Windows instead of running `openclaw update`.");
+        }
+
         await PreparedPayloadResolver.ResolveAsync(
             options,
             CancellationToken.None);
@@ -133,6 +140,35 @@ internal static class Program
             options.OpenClawArguments,
             CancellationToken.None,
             log);
+    }
+
+    private static bool IsUpstreamUpdateCommand(IReadOnlyList<string> args)
+    {
+        for (int index = 0; index < args.Count; index++)
+        {
+            string argument = args[index];
+            if (argument is "--dev" or "--no-color")
+            {
+                continue;
+            }
+
+            if (argument.StartsWith("--container=", StringComparison.Ordinal) ||
+                argument.StartsWith("--profile=", StringComparison.Ordinal) ||
+                argument.StartsWith("--log-level=", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (argument is "--container" or "--profile" or "--log-level")
+            {
+                index++;
+                continue;
+            }
+
+            return argument is "update" or "--update";
+        }
+
+        return false;
     }
 
     private static async Task<int> RunControlAsync(
@@ -159,26 +195,11 @@ internal static class Program
                     Assembly.GetExecutingAssembly().GetName().Version?.ToString() ??
                     "unknown");
                 return 0;
-            case ClawCtlCommand.Verify:
-            {
-                NodeRuntime nodeRuntime = await NodeRuntimeResolver.ResolveAsync(
-                    CancellationToken.None);
-                ClawCtlConsole.WriteNodeRuntimeSummary(Console.Out, nodeRuntime);
-                var verifier = new PayloadStager(options.InstallDirectory, log);
-                PayloadVerification verification = await verifier.VerifyAsync(
-                    options.PayloadPath,
-                    options.MetadataPath,
-                    CancellationToken.None);
-                ClawCtlConsole.WriteVerificationSummary(Console.Out, verification);
-                return verification.IsValid ? 0 : 1;
-            }
             case ClawCtlCommand.Prepare:
-            case ClawCtlCommand.Repair:
             {
                 NodeRuntime nodeRuntime = await NodeRuntimeResolver.ResolveAsync(
                     CancellationToken.None);
                 ClawCtlConsole.WriteNodeRuntimeSummary(Console.Out, nodeRuntime);
-                bool repair = parsed.Command == ClawCtlCommand.Repair;
                 void ReportProgress(string message)
                 {
                     log(message);
@@ -187,16 +208,14 @@ internal static class Program
 
                 var stager = new PayloadStager(
                     options.InstallDirectory,
-                    ReportProgress,
-                    verifyInstalledPayload: repair);
+                    ReportProgress);
                 StagedPayload payload = await stager.StageAsync(
                     options.PayloadPath,
                     options.MetadataPath,
                     CancellationToken.None);
                 ClawCtlConsole.WritePreparationSummary(
                     Console.Out,
-                    payload,
-                    repair);
+                    payload);
                 return 0;
             }
             default:

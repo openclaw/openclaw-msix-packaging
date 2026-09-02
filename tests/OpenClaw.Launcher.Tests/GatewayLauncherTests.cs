@@ -21,10 +21,10 @@ public sealed class GatewayLauncherTests : IDisposable
 
         Assert.False(startInfo.UseShellExecute);
         Assert.False(startInfo.RedirectStandardError);
-        Assert.Equal(_payloadDirectory, startInfo.WorkingDirectory);
+        Assert.Empty(startInfo.WorkingDirectory);
         Assert.Equal(
             "external",
-            startInfo.Environment["OPENCLAW_SUPERVISOR_MODE"]);
+            startInfo.Environment["OPENCLAW_SERVICE_REPAIR_POLICY"]);
         Assert.Equal("1", startInfo.Environment["OPENCLAW_NO_AUTO_UPDATE"]);
         Assert.Equal(
             [Path.Combine(_payloadDirectory, "openclaw.mjs")],
@@ -42,9 +42,10 @@ public sealed class GatewayLauncherTests : IDisposable
             arguments);
 
         Assert.False(startInfo.RedirectStandardError);
+        Assert.Empty(startInfo.WorkingDirectory);
         Assert.Equal(
             "external",
-            startInfo.Environment["OPENCLAW_SUPERVISOR_MODE"]);
+            startInfo.Environment["OPENCLAW_SERVICE_REPAIR_POLICY"]);
         Assert.Equal("1", startInfo.Environment["OPENCLAW_NO_AUTO_UPDATE"]);
         Assert.Equal(
             [Path.Combine(_payloadDirectory, "openclaw.mjs"), .. arguments],
@@ -52,8 +53,6 @@ public sealed class GatewayLauncherTests : IDisposable
     }
 
     [Theory]
-    [InlineData("update", "--yes")]
-    [InlineData("--update")]
     [InlineData("gateway", "call", "update.run")]
     [InlineData("gateway", "install")]
     [InlineData("setup", "--install-daemon")]

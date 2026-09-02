@@ -4,9 +4,7 @@ public enum ClawCtlCommand
 {
     Help,
     Version,
-    Prepare,
-    Verify,
-    Repair
+    Prepare
 }
 
 public sealed record ClawCtlCommandParseResult(
@@ -30,16 +28,6 @@ public static class ClawCtlCommandParser
         if (IsSingle(args, "prepare"))
         {
             return new ClawCtlCommandParseResult(ClawCtlCommand.Prepare);
-        }
-
-        if (IsSingle(args, "verify"))
-        {
-            return new ClawCtlCommandParseResult(ClawCtlCommand.Verify);
-        }
-
-        if (IsSingle(args, "repair"))
-        {
-            return new ClawCtlCommandParseResult(ClawCtlCommand.Repair);
         }
 
         return new ClawCtlCommandParseResult(

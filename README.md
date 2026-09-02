@@ -48,13 +48,17 @@ clawctl prepare
 These readiness checks and actionable guidance are the only package-specific
 behavior in the `openclaw` entrypoint. Once the prepared payload and external
 Node.js prerequisite are valid, all arguments are passed through unchanged and
-the child process exit code is returned unchanged.
+the child process exit code is returned unchanged, except that `openclaw update`
+is rejected because MSIX owns application updates.
 
 Every OpenClaw child process runs with
-`OPENCLAW_SUPERVISOR_MODE=external` and `OPENCLAW_NO_AUTO_UPDATE=1`. This makes
-the MSIX package the authoritative owner of Gateway code updates without
-shadowing OpenClaw commands. OpenClaw itself is responsible for enforcing
-those environment flags.
+`OPENCLAW_SERVICE_REPAIR_POLICY=external` and `OPENCLAW_NO_AUTO_UPDATE=1`.
+The first setting prevents doctor from repairing an externally managed Gateway
+service, while the second disables configured background auto-updates. Upstream
+OpenClaw does not apply either setting to the manual `openclaw update` command,
+so the launcher blocks that command with guidance to update through Windows.
+OpenClaw inherits the terminal's working directory; the launcher does not make
+the prepared application directory the workspace.
 
 ### `clawctl`
 
@@ -64,23 +68,20 @@ cannot perform itself:
 | Command | Behavior |
 |---|---|
 | `clawctl prepare` | Verify the packaged archive and prepare it when missing or outdated. |
-| `clawctl verify` | Deeply verify the prepared payload without changing it. |
-| `clawctl repair` | Deeply verify the prepared payload and recreate it from packaged content when invalid. |
 
 Bare `clawctl` and `clawctl --help` print help without changing state.
 Commands such as `setup`, `doctor`, `gateway`, and `uninstall` belong to the
 OpenClaw CLI and must be invoked through `openclaw`.
 
-`prepare`, `verify`, and `repair` require a compatible device-installed
-Node.js runtime. Missing, outdated, malformed, or architecture-incompatible
-runtimes produce an actionable error rather than a later process-launch
-failure.
+`prepare` requires a compatible device-installed Node.js runtime. Missing,
+outdated, malformed, or architecture-incompatible runtimes produce an
+actionable error rather than a later process-launch failure.
 
 Preparation extracts into a temporary directory, moves any existing prepared
 payload aside, and promotes the new payload only after extraction and
 verification succeed. The previous payload is restored if promotion fails.
-Preparation and repair refuse to replace files while a packaged OpenClaw
-process is using the prepared payload.
+Preparation refuses to replace files while a packaged OpenClaw process is using
+the prepared payload.
 
 Install the current Node.js LTS release, open a new terminal, then prepare the
 payload once before using `openclaw`:
@@ -169,12 +170,12 @@ be removed manually after OpenClaw is stopped.
 
 ## Integrity and isolation boundary
 
-`clawctl prepare`, `verify`, and `repair` verify the immutable payload archive
-shipped in the MSIX. Normal `openclaw` launches load the packaged metadata and
-compare its payload hash with the prepared payload marker, then confirm that
-every inventory-listed file still exists. They do not hash the archive or every
-extracted file. Re-hashing the complete prepared payload on every launch was
-intentionally rejected because it substantially delayed OpenClaw startup.
+`clawctl prepare` verifies the immutable payload archive shipped in the MSIX
+before extracting it. Normal `openclaw` launches compare the packaged payload
+hash with the prepared marker and confirm only that the OpenClaw entry point
+exists. They do not inspect, hash, allowlist, or reject other files in the
+prepared directory. A matching payload is reused as-is, including user-created
+or modified files.
 
 The prepared gateway directory is writable by the current user and is treated
 as user-owned application state, not as a tamper-resistant trust boundary.

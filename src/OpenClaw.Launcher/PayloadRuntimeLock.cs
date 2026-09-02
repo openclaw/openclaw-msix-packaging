@@ -14,25 +14,7 @@ internal static class PayloadRuntimeLock
         catch (IOException exception)
         {
             throw new InvalidOperationException(
-                "The packaged OpenClaw payload is being prepared or repaired. " +
-                "Wait for clawctl to finish, then retry.",
-                exception);
-        }
-    }
-
-    public static FileStream AcquireForVerification(string installDirectory)
-    {
-        try
-        {
-            return Open(
-                installDirectory,
-                FileAccess.ReadWrite,
-                FileShare.ReadWrite);
-        }
-        catch (IOException exception)
-        {
-            throw new InvalidOperationException(
-                "The prepared OpenClaw payload is being prepared or repaired. " +
+                "The packaged OpenClaw payload is being prepared. " +
                 "Wait for clawctl to finish, then retry.",
                 exception);
         }
@@ -51,7 +33,7 @@ internal static class PayloadRuntimeLock
         {
             throw new InvalidOperationException(
                 "OpenClaw is currently using the prepared payload. " +
-                "Stop the packaged OpenClaw process before preparing or repairing it.",
+                "Stop the packaged OpenClaw process before preparing it.",
                 exception);
         }
     }

@@ -29,7 +29,39 @@ public sealed class ProgramTests : IDisposable
         Assert.Contains("clawctl prepare", exception.Message);
     }
 
-    private async Task<HostOptions> CreateUnpreparedOptionsAsync()
+    [Theory]
+    [InlineData("update")]
+    [InlineData("--update")]
+    [InlineData("update", "--yes")]
+    [InlineData("--dev", "update")]
+    [InlineData("--profile", "staging", "update")]
+    [InlineData("--profile=staging", "--no-color", "update")]
+    [InlineData("--container", "openclaw-test", "update")]
+    [InlineData("--log-level=debug", "update")]
+    public async Task AgentLaunchRejectsUpstreamSelfUpdateBeforeNodeDependency(
+        params string[] arguments)
+    {
+        HostOptions options = await CreateUnpreparedOptionsAsync(arguments);
+        bool nodeResolutionAttempted = false;
+
+        InvalidOperationException exception =
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                () => Program.RunAgentAsync(
+                    options,
+                    _ => { },
+                    _ =>
+                    {
+                        nodeResolutionAttempted = true;
+                        throw new InvalidOperationException(
+                            "Node resolution should not run.");
+                    }));
+
+        Assert.False(nodeResolutionAttempted);
+        Assert.Contains("managed by the installed MSIX package", exception.Message);
+    }
+
+    private async Task<HostOptions> CreateUnpreparedOptionsAsync(
+        IReadOnlyList<string>? arguments = null)
     {
         string architecture = RuntimeInformation.ProcessArchitecture ==
             Architecture.Arm64
@@ -57,7 +89,7 @@ public sealed class ProgramTests : IDisposable
             payloadPath,
             metadataPath,
             Path.Combine(_testDirectory, "app"),
-            []);
+            arguments ?? []);
     }
 
     public void Dispose()

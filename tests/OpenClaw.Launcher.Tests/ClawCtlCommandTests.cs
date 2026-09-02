@@ -5,8 +5,6 @@ public sealed class ClawCtlCommandTests
     [Theory]
     [InlineData(ClawCtlCommand.Help)]
     [InlineData(ClawCtlCommand.Prepare, "prepare")]
-    [InlineData(ClawCtlCommand.Verify, "verify")]
-    [InlineData(ClawCtlCommand.Repair, "repair")]
     [InlineData(ClawCtlCommand.Version, "--version")]
     public void ParseAcceptsOnlyThePublicManagementSurface(
         ClawCtlCommand expected,
@@ -23,6 +21,8 @@ public sealed class ClawCtlCommandTests
     [InlineData("doctor")]
     [InlineData("gateway", "status")]
     [InlineData("update-package")]
+    [InlineData("verify")]
+    [InlineData("repair")]
     [InlineData("prepare", "--force")]
     public void ParseRejectsCommandsOutsideThePublicManagementSurface(
         params string[] args)

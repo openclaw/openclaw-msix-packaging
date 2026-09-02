@@ -3,140 +3,12 @@ using System.IO.Compression;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 
 namespace OpenClaw.Launcher.Tests;
 
 public sealed class PayloadStagerTests : IDisposable
 {
     private readonly string _testDirectory = TestDirectory.Create();
-
-    [Fact]
-    public async Task VerifyAsyncReportsValidPreparedPayloadWithoutChangingIt()
-    {
-        PackageFixture fixture = await CreatePackageAsync(
-        [
-            new PaxTarEntry(TarEntryType.RegularFile, "openclaw.mjs")
-            {
-                DataStream = TextStream("fixture")
-            }
-        ]);
-        string installDirectory = Path.Combine(_testDirectory, "app");
-        var stager = new PayloadStager(installDirectory);
-        await stager.StageAsync(
-            fixture.ArchivePath,
-            fixture.MetadataPath,
-            CancellationToken.None);
-
-        PayloadVerification verification = await stager.VerifyAsync(
-            fixture.ArchivePath,
-            fixture.MetadataPath,
-            CancellationToken.None);
-
-        Assert.True(verification.IsValid);
-    }
-
-    [Fact]
-    public async Task VerifyAsyncReportsDamageWithoutRepairingIt()
-    {
-        PackageFixture fixture = await CreatePackageAsync(
-        [
-            new PaxTarEntry(TarEntryType.RegularFile, "openclaw.mjs")
-            {
-                DataStream = TextStream("original")
-            }
-        ]);
-        string installDirectory = Path.Combine(_testDirectory, "app");
-        var stager = new PayloadStager(installDirectory);
-        await stager.StageAsync(
-            fixture.ArchivePath,
-            fixture.MetadataPath,
-            CancellationToken.None);
-        string entryPoint = Path.Combine(installDirectory, "openclaw.mjs");
-        await File.WriteAllTextAsync(entryPoint, "damaged");
-
-        PayloadVerification verification = await stager.VerifyAsync(
-            fixture.ArchivePath,
-            fixture.MetadataPath,
-            CancellationToken.None);
-
-        Assert.False(verification.IsValid);
-        Assert.Equal("damaged", await File.ReadAllTextAsync(entryPoint));
-    }
-
-    [Fact]
-    public async Task VerifyAsyncRefusesToRacePayloadMutation()
-    {
-        PackageFixture fixture = await CreatePackageAsync(
-        [
-            new PaxTarEntry(TarEntryType.RegularFile, "openclaw.mjs")
-            {
-                DataStream = TextStream("fixture")
-            }
-        ]);
-        string installDirectory = Path.Combine(_testDirectory, "app");
-        var stager = new PayloadStager(installDirectory);
-        await stager.StageAsync(
-            fixture.ArchivePath,
-            fixture.MetadataPath,
-            CancellationToken.None);
-        using FileStream mutation =
-            PayloadRuntimeLock.AcquireForMutation(installDirectory);
-
-        InvalidOperationException exception =
-            await Assert.ThrowsAsync<InvalidOperationException>(
-                () => stager.VerifyAsync(
-                    fixture.ArchivePath,
-                    fixture.MetadataPath,
-                    CancellationToken.None));
-
-        Assert.Contains(
-            "being prepared or repaired",
-            exception.Message,
-            StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task RepairRefusesToReplacePayloadWhileOpenClawUsesIt()
-    {
-        PackageFixture fixture = await CreatePackageAsync(
-        [
-            new PaxTarEntry(TarEntryType.RegularFile, "openclaw.mjs")
-            {
-                DataStream = TextStream("original")
-            }
-        ]);
-        string installDirectory = Path.Combine(_testDirectory, "app");
-        var prepare = new PayloadStager(installDirectory);
-        await prepare.StageAsync(
-            fixture.ArchivePath,
-            fixture.MetadataPath,
-            CancellationToken.None);
-        await File.WriteAllTextAsync(
-            Path.Combine(installDirectory, "openclaw.mjs"),
-            "damaged");
-        using FileStream runtime =
-            PayloadRuntimeLock.AcquireForLaunch(installDirectory);
-        var repair = new PayloadStager(
-            installDirectory,
-            verifyInstalledPayload: true);
-
-        InvalidOperationException exception =
-            await Assert.ThrowsAsync<InvalidOperationException>(
-                () => repair.StageAsync(
-                    fixture.ArchivePath,
-                    fixture.MetadataPath,
-                    CancellationToken.None));
-
-        Assert.Contains(
-            "currently using",
-            exception.Message,
-            StringComparison.Ordinal);
-        Assert.Equal(
-            "damaged",
-            await File.ReadAllTextAsync(
-                Path.Combine(installDirectory, "openclaw.mjs")));
-    }
 
     [Fact]
     public async Task StageAsyncExtractsAndReusesVerifiedPayload()
@@ -175,7 +47,7 @@ public sealed class PayloadStagerTests : IDisposable
         Assert.Contains(
             messages,
             message => message.Contains(
-                "skipping full per-file verification",
+                "preserving user changes",
                 StringComparison.Ordinal));
         Assert.Equal(
             2,
@@ -213,7 +85,7 @@ public sealed class PayloadStagerTests : IDisposable
     }
 
     [Fact]
-    public async Task StageAsyncMigratesExistingInventoryWhenMarkerIsMissing()
+    public async Task StageAsyncRecreatesPayloadWhenMarkerIsMissing()
     {
         var messages = new List<string>();
         PackageFixture fixture = await CreatePackageAsync(
@@ -235,17 +107,14 @@ public sealed class PayloadStagerTests : IDisposable
             ".payload-verified-sha256"));
         messages.Clear();
 
-        StagedPayload verified = await stager.StageAsync(
+        StagedPayload prepared = await stager.StageAsync(
             fixture.ArchivePath,
             fixture.MetadataPath,
             CancellationToken.None);
 
-        Assert.Equal(staged.DirectoryPath, verified.DirectoryPath);
-        Assert.Equal(staged.PayloadSha256, verified.PayloadSha256);
-        Assert.True(verified.Reused);
-        Assert.Contains(
-            "Migrated the verified payload inventory to the fast marker.",
-            messages);
+        Assert.Equal(staged.DirectoryPath, prepared.DirectoryPath);
+        Assert.Equal(staged.PayloadSha256, prepared.PayloadSha256);
+        Assert.False(prepared.Reused);
         Assert.True(File.Exists(Path.Combine(
             staged.DirectoryPath,
             ".payload-verified-sha256")));
@@ -284,42 +153,6 @@ public sealed class PayloadStagerTests : IDisposable
             "original",
             await File.ReadAllTextAsync(
                 Path.Combine(repaired.DirectoryPath, "openclaw.mjs")));
-    }
-
-    [Fact]
-    public async Task StageAsyncRepairsNullInventoryHashWithoutMarker()
-    {
-        PackageFixture fixture = await CreatePackageAsync(
-        [
-            new PaxTarEntry(TarEntryType.RegularFile, "openclaw.mjs")
-            {
-                DataStream = TextStream("original")
-            }
-        ]);
-        var stager = new PayloadStager(Path.Combine(_testDirectory, "app"));
-        StagedPayload staged = await stager.StageAsync(
-            fixture.ArchivePath,
-            fixture.MetadataPath,
-            CancellationToken.None);
-        File.Delete(Path.Combine(
-            staged.DirectoryPath,
-            ".payload-verified-sha256"));
-        await File.WriteAllTextAsync(
-            Path.Combine(staged.DirectoryPath, ".payload-inventory.json"),
-            """{"PayloadSha256":null,"Files":[]}""",
-            CancellationToken.None);
-
-        StagedPayload repaired = await stager.StageAsync(
-            fixture.ArchivePath,
-            fixture.MetadataPath,
-            CancellationToken.None);
-
-        Assert.Equal(staged, repaired);
-        Assert.Equal(
-            "original",
-            await File.ReadAllTextAsync(
-                Path.Combine(repaired.DirectoryPath, "openclaw.mjs"),
-                CancellationToken.None));
     }
 
     [Fact]
@@ -609,7 +442,7 @@ public sealed class PayloadStagerTests : IDisposable
     }
 
     [Fact]
-    public async Task StageAsyncRepairsModifiedInstalledFile()
+    public async Task StageAsyncPreservesModifiedInstalledFile()
     {
         PackageFixture fixture = await CreatePackageAsync(
         [
@@ -618,9 +451,7 @@ public sealed class PayloadStagerTests : IDisposable
                 DataStream = TextStream("original")
             }
         ]);
-        var stager = new PayloadStager(
-            Path.Combine(_testDirectory, "app"),
-            verifyInstalledPayload: true);
+        var stager = new PayloadStager(Path.Combine(_testDirectory, "app"));
         StagedPayload staged = await stager.StageAsync(
             fixture.ArchivePath,
             fixture.MetadataPath,
@@ -630,21 +461,22 @@ public sealed class PayloadStagerTests : IDisposable
             "modified",
             CancellationToken.None);
 
-        StagedPayload repaired = await stager.StageAsync(
+        StagedPayload reused = await stager.StageAsync(
             fixture.ArchivePath,
             fixture.MetadataPath,
             CancellationToken.None);
 
-        Assert.Equal(staged.DirectoryPath, repaired.DirectoryPath);
+        Assert.True(reused.Reused);
+        Assert.Equal(staged.DirectoryPath, reused.DirectoryPath);
         Assert.Equal(
-            "original",
+            "modified",
             await File.ReadAllTextAsync(
-                Path.Combine(repaired.DirectoryPath, "openclaw.mjs"),
+                Path.Combine(reused.DirectoryPath, "openclaw.mjs"),
                 CancellationToken.None));
     }
 
     [Fact]
-    public async Task StageAsyncDoesNotTrustModifiedInstalledInventory()
+    public async Task StageAsyncPreservesAdditionalInstalledFile()
     {
         PackageFixture fixture = await CreatePackageAsync(
         [
@@ -653,112 +485,26 @@ public sealed class PayloadStagerTests : IDisposable
                 DataStream = TextStream("original")
             }
         ]);
-        var stager = new PayloadStager(
-            Path.Combine(_testDirectory, "app"),
-            verifyInstalledPayload: true);
+        var stager = new PayloadStager(Path.Combine(_testDirectory, "app"));
         StagedPayload staged = await stager.StageAsync(
             fixture.ArchivePath,
             fixture.MetadataPath,
             CancellationToken.None);
-        string entryPoint = Path.Combine(staged.DirectoryPath, "openclaw.mjs");
-        await File.WriteAllTextAsync(entryPoint, "modified", CancellationToken.None);
-
-        string inventoryPath = Path.Combine(
-            staged.DirectoryPath,
-            ".payload-inventory.json");
-        JsonNode inventory = JsonNode.Parse(
-            await File.ReadAllTextAsync(inventoryPath, CancellationToken.None))!;
-        JsonObject entry = inventory["Files"]!.AsArray()[0]!.AsObject();
-        entry["Length"] = new FileInfo(entryPoint).Length;
-        await using (FileStream modifiedStream = File.OpenRead(entryPoint))
-        {
-            entry["Sha256"] = Convert.ToHexString(
-                await SHA256.HashDataAsync(
-                    modifiedStream,
-                    CancellationToken.None)).ToLowerInvariant();
-        }
+        string additionalFile = Path.Combine(staged.DirectoryPath, "AGENTS.md");
         await File.WriteAllTextAsync(
-            inventoryPath,
-            inventory.ToJsonString(),
+            additionalFile,
+            "user-created",
             CancellationToken.None);
 
-        await stager.StageAsync(
+        StagedPayload reused = await stager.StageAsync(
             fixture.ArchivePath,
             fixture.MetadataPath,
             CancellationToken.None);
 
+        Assert.True(reused.Reused);
         Assert.Equal(
-            "original",
-            await File.ReadAllTextAsync(entryPoint, CancellationToken.None));
-    }
-
-    [Fact]
-    public async Task StageAsyncRepairsIncompleteInstalledInventory()
-    {
-        PackageFixture fixture = await CreatePackageAsync(
-        [
-            new PaxTarEntry(TarEntryType.RegularFile, "openclaw.mjs")
-            {
-                DataStream = TextStream("original")
-            }
-        ]);
-        var stager = new PayloadStager(
-            Path.Combine(_testDirectory, "app"),
-            verifyInstalledPayload: true);
-        StagedPayload staged = await stager.StageAsync(
-            fixture.ArchivePath,
-            fixture.MetadataPath,
-            CancellationToken.None);
-        string inventoryPath = Path.Combine(
-            staged.DirectoryPath,
-            ".payload-inventory.json");
-        await File.WriteAllTextAsync(
-            inventoryPath,
-            JsonSerializer.Serialize(new
-            {
-                staged.PayloadSha256,
-                Files = (object?)null
-            }),
-            CancellationToken.None);
-
-        StagedPayload repaired = await stager.StageAsync(
-            fixture.ArchivePath,
-            fixture.MetadataPath,
-            CancellationToken.None);
-
-        Assert.Equal(staged, repaired);
-        Assert.True(File.Exists(Path.Combine(repaired.DirectoryPath, "openclaw.mjs")));
-    }
-
-    [Fact]
-    public async Task StageAsyncRemovesUnexpectedInstalledFile()
-    {
-        PackageFixture fixture = await CreatePackageAsync(
-        [
-            new PaxTarEntry(TarEntryType.RegularFile, "openclaw.mjs")
-            {
-                DataStream = TextStream("original")
-            }
-        ]);
-        var stager = new PayloadStager(
-            Path.Combine(_testDirectory, "app"),
-            verifyInstalledPayload: true);
-        StagedPayload staged = await stager.StageAsync(
-            fixture.ArchivePath,
-            fixture.MetadataPath,
-            CancellationToken.None);
-        await File.WriteAllTextAsync(
-            Path.Combine(staged.DirectoryPath, "unexpected.txt"),
-            "unexpected",
-            CancellationToken.None);
-
-        StagedPayload repaired = await stager.StageAsync(
-            fixture.ArchivePath,
-            fixture.MetadataPath,
-            CancellationToken.None);
-
-        Assert.Equal(staged.DirectoryPath, repaired.DirectoryPath);
-        Assert.False(File.Exists(Path.Combine(repaired.DirectoryPath, "unexpected.txt")));
+            "user-created",
+            await File.ReadAllTextAsync(additionalFile, CancellationToken.None));
     }
 
     private async Task<PackageFixture> CreatePackageAsync(
