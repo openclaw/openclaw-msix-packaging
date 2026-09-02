@@ -24,6 +24,9 @@ public sealed class GatewayLauncherTests : IDisposable
         Assert.Empty(startInfo.WorkingDirectory);
         Assert.Equal(
             "external",
+            startInfo.Environment["OPENCLAW_SUPERVISOR_MODE"]);
+        Assert.Equal(
+            "external",
             startInfo.Environment["OPENCLAW_SERVICE_REPAIR_POLICY"]);
         Assert.Equal("1", startInfo.Environment["OPENCLAW_NO_AUTO_UPDATE"]);
         Assert.Equal(
@@ -45,6 +48,9 @@ public sealed class GatewayLauncherTests : IDisposable
         Assert.Empty(startInfo.WorkingDirectory);
         Assert.Equal(
             "external",
+            startInfo.Environment["OPENCLAW_SUPERVISOR_MODE"]);
+        Assert.Equal(
+            "external",
             startInfo.Environment["OPENCLAW_SERVICE_REPAIR_POLICY"]);
         Assert.Equal("1", startInfo.Environment["OPENCLAW_NO_AUTO_UPDATE"]);
         Assert.Equal(
@@ -53,6 +59,8 @@ public sealed class GatewayLauncherTests : IDisposable
     }
 
     [Theory]
+    [InlineData("update", "--yes")]
+    [InlineData("--update")]
     [InlineData("gateway", "call", "update.run")]
     [InlineData("gateway", "install")]
     [InlineData("setup", "--install-daemon")]

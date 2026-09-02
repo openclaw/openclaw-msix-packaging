@@ -48,15 +48,17 @@ clawctl prepare
 These readiness checks and actionable guidance are the only package-specific
 behavior in the `openclaw` entrypoint. Once the prepared payload and external
 Node.js prerequisite are valid, all arguments are passed through unchanged and
-the child process exit code is returned unchanged, except that `openclaw update`
-is rejected because MSIX owns application updates.
+the child process exit code is returned unchanged.
 
 Every OpenClaw child process runs with
-`OPENCLAW_SERVICE_REPAIR_POLICY=external` and `OPENCLAW_NO_AUTO_UPDATE=1`.
-The first setting prevents doctor from repairing an externally managed Gateway
-service, while the second disables configured background auto-updates. Upstream
-OpenClaw does not apply either setting to the manual `openclaw update` command,
-so the launcher blocks that command with guidance to update through Windows.
+`OPENCLAW_SUPERVISOR_MODE=external`,
+`OPENCLAW_SERVICE_REPAIR_POLICY=external`, and
+`OPENCLAW_NO_AUTO_UPDATE=1`. These declare external lifecycle ownership,
+prevent doctor-owned service repair, and disable configured background
+auto-updates on OpenClaw versions that support the corresponding contracts.
+Upstream OpenClaw is responsible for deciding how those settings affect its
+commands. The launcher does not reserve, reject, or rewrite upstream command
+arguments.
 OpenClaw inherits the terminal's working directory; the launcher does not make
 the prepared application directory the workspace.
 
