@@ -171,10 +171,10 @@ be removed manually after OpenClaw is stopped.
 
 `clawctl prepare`, `verify`, and `repair` verify the immutable payload archive
 shipped in the MSIX. Normal `openclaw` launches load the packaged metadata and
-compare its payload hash with the prepared payload marker; they do not hash the
-archive or every extracted file. Re-hashing the complete prepared payload on
-every launch was intentionally rejected because it substantially delayed
-OpenClaw startup.
+compare its payload hash with the prepared payload marker, then confirm that
+every inventory-listed file still exists. They do not hash the archive or every
+extracted file. Re-hashing the complete prepared payload on every launch was
+intentionally rejected because it substantially delayed OpenClaw startup.
 
 The prepared gateway directory is writable by the current user and is treated
 as user-owned application state, not as a tamper-resistant trust boundary.

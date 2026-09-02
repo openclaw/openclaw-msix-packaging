@@ -17,7 +17,18 @@ public sealed class PreparedPayloadResolverTests : IDisposable
             "fixture");
         await File.WriteAllTextAsync(
             Path.Combine(options.InstallDirectory, ".payload-inventory.json"),
-            "{}");
+            """
+            {
+              "PayloadSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "Files": [
+                {
+                  "Path": "openclaw.mjs",
+                  "Length": 7,
+                  "Sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                }
+              ]
+            }
+            """);
         await File.WriteAllTextAsync(
             Path.Combine(options.InstallDirectory, ".payload-verified-sha256"),
             new string('b', 64));
@@ -27,6 +38,59 @@ public sealed class PreparedPayloadResolverTests : IDisposable
             CancellationToken.None);
 
         Assert.Equal(options.InstallDirectory, resolved);
+    }
+
+    [Fact]
+    public async Task ResolveAsyncDirectsTheUserToClawCtlWhenListedFileIsMissing()
+    {
+        HostOptions options = await CreateOptionsAsync();
+        Directory.CreateDirectory(options.InstallDirectory);
+        await File.WriteAllTextAsync(
+            Path.Combine(options.InstallDirectory, "openclaw.mjs"),
+            "fixture");
+        await File.WriteAllTextAsync(
+            Path.Combine(options.InstallDirectory, "required-module.mjs"),
+            "fixture");
+        await File.WriteAllTextAsync(
+            Path.Combine(options.InstallDirectory, ".payload-inventory.json"),
+            """
+            {
+              "PayloadSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "Files": [
+                {
+                  "Path": "openclaw.mjs",
+                  "Length": 7,
+                  "Sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                },
+                {
+                  "Path": "required-module.mjs",
+                  "Length": 7,
+                  "Sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                }
+              ]
+            }
+            """);
+        await File.WriteAllTextAsync(
+            Path.Combine(options.InstallDirectory, ".payload-verified-sha256"),
+            new string('b', 64));
+        File.Delete(Path.Combine(
+            options.InstallDirectory,
+            "required-module.mjs"));
+
+        InvalidOperationException exception =
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                () => PreparedPayloadResolver.ResolveAsync(
+                    options,
+                    CancellationToken.None));
+
+        Assert.Contains(
+            "not prepared or is incomplete",
+            exception.Message,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "clawctl prepare",
+            exception.Message,
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -62,7 +126,18 @@ public sealed class PreparedPayloadResolverTests : IDisposable
             Path.Combine(
                 options.InstallDirectory,
                 PayloadStager.InventoryFileName),
-            "{}");
+            """
+            {
+              "PayloadSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "Files": [
+                {
+                  "Path": "openclaw.mjs",
+                  "Length": 7,
+                  "Sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                }
+              ]
+            }
+            """);
         await File.WriteAllTextAsync(
             Path.Combine(
                 options.InstallDirectory,

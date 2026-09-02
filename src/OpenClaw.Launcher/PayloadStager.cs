@@ -620,9 +620,56 @@ public sealed class PayloadStager(
         string markerPath = Path.Combine(
             installDirectory,
             VerificationMarkerFileName);
+        string inventoryPath = Path.Combine(
+            installDirectory,
+            InventoryFileName);
         if (!File.Exists(markerPath) ||
-            !File.Exists(Path.Combine(installDirectory, InventoryFileName)) ||
+            !File.Exists(inventoryPath) ||
             !File.Exists(Path.Combine(installDirectory, "openclaw.mjs")))
+        {
+            return null;
+        }
+
+        PayloadInventory? inventory;
+        try
+        {
+            await using FileStream stream = File.OpenRead(inventoryPath);
+            inventory = await JsonSerializer.DeserializeAsync(
+                stream,
+                OpenClawJsonContext.Default.PayloadInventory,
+                cancellationToken);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+
+        if (inventory?.Files is not { Count: > 0 })
+        {
+            return null;
+        }
+
+        try
+        {
+            foreach (PayloadInventoryEntry item in inventory.Files)
+            {
+                if (string.IsNullOrEmpty(item.Path))
+                {
+                    return null;
+                }
+
+                string normalizedPath = NormalizeEntryPath(item.Path);
+                if (!string.Equals(
+                        ToArchivePath(normalizedPath),
+                        item.Path,
+                        StringComparison.Ordinal) ||
+                    !File.Exists(Path.Combine(installDirectory, normalizedPath)))
+                {
+                    return null;
+                }
+            }
+        }
+        catch (InvalidDataException)
         {
             return null;
         }
