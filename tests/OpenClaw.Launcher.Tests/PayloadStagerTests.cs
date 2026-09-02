@@ -234,6 +234,64 @@ public sealed class PayloadStagerTests : IDisposable
     }
 
     [Fact]
+    public async Task StageAsyncDoesNotFailWhenBackupCleanupFails()
+    {
+        PackageFixture firstFixture = await CreatePackageAsync(
+        [
+            new PaxTarEntry(TarEntryType.RegularFile, "openclaw.mjs")
+            {
+                DataStream = TextStream("first")
+            }
+        ]);
+        PackageFixture secondFixture = await CreatePackageAsync(
+        [
+            new PaxTarEntry(TarEntryType.RegularFile, "openclaw.mjs")
+            {
+                DataStream = TextStream("second")
+            }
+        ]);
+        string installDirectory = Path.Combine(_testDirectory, "app");
+        var initialStager = new PayloadStager(installDirectory);
+        await initialStager.StageAsync(
+            firstFixture.ArchivePath,
+            firstFixture.MetadataPath,
+            CancellationToken.None);
+        var messages = new List<string>();
+        var updatingStager = new PayloadStager(
+            installDirectory,
+            messages.Add,
+            path =>
+            {
+                if (path.EndsWith(".previous", StringComparison.Ordinal))
+                {
+                    throw new IOException("The directory is in use.");
+                }
+
+                if (Directory.Exists(path))
+                {
+                    Directory.Delete(path, recursive: true);
+                }
+            });
+
+        StagedPayload updated = await updatingStager.StageAsync(
+            secondFixture.ArchivePath,
+            secondFixture.MetadataPath,
+            CancellationToken.None);
+
+        Assert.False(updated.Reused);
+        Assert.Equal(
+            "second",
+            await File.ReadAllTextAsync(
+                Path.Combine(installDirectory, "openclaw.mjs"),
+                CancellationToken.None));
+        Assert.Contains(
+            messages,
+            message => message.Contains(
+                "Could not remove payload cleanup directory",
+                StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task StageAsyncRecoversInterruptedDirectoryPromotion()
     {
         PackageFixture fixture = await CreatePackageAsync(

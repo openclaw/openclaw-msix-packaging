@@ -5,16 +5,33 @@ using System.Security.Cryptography;
 
 namespace OpenClaw.Launcher;
 
-public sealed class PayloadStager(
-    string installDirectory,
-    Action<string>? log = null)
+public sealed class PayloadStager
 {
     private const int MaximumEntryCount = 250_000;
     private const long MaximumExtractedBytes = 8L * 1024 * 1024 * 1024;
     internal const string VerificationMarkerFileName = ".payload-verified-sha256";
     private static readonly StringComparer PathComparer = StringComparer.OrdinalIgnoreCase;
-    private readonly string _installDirectory = Path.GetFullPath(installDirectory);
-    private readonly Action<string> _log = log ?? (_ => { });
+    private readonly string _installDirectory;
+    private readonly Action<string> _log;
+    private readonly Action<string> _cleanupDirectory;
+
+    public PayloadStager(
+        string installDirectory,
+        Action<string>? log = null)
+        : this(installDirectory, log, DeleteDirectory)
+    {
+    }
+
+    internal PayloadStager(
+        string installDirectory,
+        Action<string>? log,
+        Action<string> cleanupDirectory)
+    {
+        ArgumentNullException.ThrowIfNull(cleanupDirectory);
+        _installDirectory = Path.GetFullPath(installDirectory);
+        _log = log ?? (_ => { });
+        _cleanupDirectory = cleanupDirectory;
+    }
 
     public async Task<StagedPayload> StageAsync(
         string payloadPath,
@@ -139,10 +156,10 @@ public sealed class PayloadStager(
             }
             finally
             {
-                DeleteDirectory(temporaryDirectory);
+                TryDeleteDirectory(temporaryDirectory);
                 if (promoted)
                 {
-                    DeleteDirectory(backupDirectory);
+                    TryDeleteDirectory(backupDirectory);
                 }
             }
         }
@@ -383,6 +400,21 @@ public sealed class PayloadStager(
         if (Directory.Exists(path))
         {
             Directory.Delete(path, recursive: true);
+        }
+    }
+
+    private void TryDeleteDirectory(string path)
+    {
+        try
+        {
+            _cleanupDirectory(path);
+        }
+        catch (Exception exception)
+            when (exception is IOException or UnauthorizedAccessException)
+        {
+            _log(
+                $"Could not remove payload cleanup directory '{path}': " +
+                exception.Message);
         }
     }
 
