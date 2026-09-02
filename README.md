@@ -169,10 +169,12 @@ be removed manually after OpenClaw is stopped.
 
 ## Integrity and isolation boundary
 
-Normal launches verify the immutable payload archive shipped in the MSIX, then
-use the prepared payload marker to avoid re-hashing every extracted file.
-Re-hashing the complete prepared payload on every launch was intentionally
-rejected because it substantially delayed OpenClaw startup.
+`clawctl prepare`, `verify`, and `repair` verify the immutable payload archive
+shipped in the MSIX. Normal `openclaw` launches load the packaged metadata and
+compare its payload hash with the prepared payload marker; they do not hash the
+archive or every extracted file. Re-hashing the complete prepared payload on
+every launch was intentionally rejected because it substantially delayed
+OpenClaw startup.
 
 The prepared gateway directory is writable by the current user and is treated
 as user-owned application state, not as a tamper-resistant trust boundary.
