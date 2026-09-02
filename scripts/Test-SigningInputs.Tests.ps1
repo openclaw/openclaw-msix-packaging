@@ -71,7 +71,7 @@ function New-TestArtifact {
         repository = $policy.repository
         requestedRef = $PayloadCommit
         resolvedCommit = $PayloadCommit
-        packageVersion = '2026.7.1-2'
+        packageVersion = '2026.8.2'
         architecture = $Architecture
         archive = $payloadArchiveName
         sha256 = $payloadHash
@@ -185,7 +185,7 @@ try {
         -Action {
             Invoke-PolicyValidation `
                 -Root $testRoot `
-                -RequestedRef 'v2026.7.1-2'
+                -RequestedRef 'v2026.8.2'
         }
 
     $x64MetadataPath = Join-Path $testRoot 'x64\msix-metadata.json'

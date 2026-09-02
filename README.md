@@ -55,9 +55,10 @@ Every OpenClaw child process runs with
 `OPENCLAW_SERVICE_REPAIR_POLICY=external`, and
 `OPENCLAW_NO_AUTO_UPDATE=1`. These declare external lifecycle ownership,
 prevent doctor-owned service repair, and disable configured background
-auto-updates on OpenClaw versions that support the corresponding contracts.
-Upstream OpenClaw is responsible for deciding how those settings affect its
-commands. The launcher does not reserve, reject, or rewrite upstream command
+auto-updates. The pinned OpenClaw `v2026.8.2` release honors external supervisor
+mode by refusing native service mutation and OpenClaw self-update with guidance
+to use the external supervisor's workflow. This behavior belongs to upstream
+OpenClaw; the launcher does not reserve, reject, or rewrite upstream command
 arguments.
 OpenClaw inherits the terminal's working directory; the launcher does not make
 the prepared application directory the workspace.
