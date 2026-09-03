@@ -8,9 +8,11 @@ This repository builds a Windows MSIX package containing:
   [`openclaw/openclaw`](https://github.com/openclaw/openclaw);
 - the matching official Node.js runtime for x64 or ARM64.
 
-The package is independent from the OpenClaw Companion application and uses a
-separate `OpenClaw.Gateway` package identity. Both packages use the OpenClaw
-Foundation publisher metadata established for OpenClaw's Windows packages.
+The package is independent from the
+[OpenClaw Windows Node and Companion](https://github.com/openclaw/openclaw-windows-node)
+and uses a separate `OpenClaw.Gateway` package identity. Both packages use the
+OpenClaw Foundation publisher metadata established for OpenClaw's Windows
+packages.
 
 ## Launcher behavior
 
@@ -125,3 +127,10 @@ agent session rather than the interactive session where the human user is
 logged in. This will provide a boundary similar in purpose to running the
 Gateway in WSL, using the forthcoming isolated-session capabilities. That
 isolation is not provided by the current MSIX implementation.
+
+## Contributors
+
+This is an independent public implementation in the OpenClaw ecosystem, informed
+by the upstream OpenClaw and Windows Node projects rather than a source fork of
+either repository. See [CONTRIBUTORS.md](CONTRIBUTORS.md) for acknowledgements
+and links to the contributor histories.
