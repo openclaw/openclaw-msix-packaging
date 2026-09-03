@@ -1,0 +1,24 @@
+{
+  "lspServers": {
+    "roslyn-language-server": {
+      "command": "dotnet",
+      "args": [
+        "tool",
+        "exec",
+        "roslyn-language-server@5.12.0-1.26426.8",
+        "--source",
+        "https://api.nuget.org/v3/index.json",
+        "--",
+        "--stdio",
+        "--autoLoadProjects",
+        "--logLevel",
+        "Information",
+        "--extensionLogDirectory",
+        "artifacts\\roslyn-logs"
+      ],
+      "fileExtensions": {
+        ".cs": "csharp"
+      }
+    }
+  }
+}
