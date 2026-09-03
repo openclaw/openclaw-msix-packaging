@@ -62,6 +62,11 @@ jobs:
         run: >
           .\scripts\Test-SigningInputs.Tests.ps1
 
+      - name: Test workflow package version
+        shell: pwsh
+        run: >
+          .\scripts\Test-WorkflowPackageVersion.Tests.ps1
+
   build-package:
     name: Build OpenClaw npm package
     runs-on: ubuntu-latest
@@ -223,9 +228,9 @@ jobs:
       - name: Compose unsigned MSIX
         shell: pwsh
         run: |
-          $buildComponent = [int64]::Parse('${{ github.run_number }}') % 65535
-          $attemptComponent = [int64]::Parse('${{ github.run_attempt }}') % 65535
-          $packageVersion = "0.1.$buildComponent.$attemptComponent"
+          $packageVersion = .\scripts\Get-WorkflowPackageVersion.ps1 `
+            -RunNumber '${{ github.run_number }}' `
+            -RunAttempt '${{ github.run_attempt }}'
 
           .\scripts\Build-MSIX.ps1 `
             -PayloadDirectory '${{ runner.temp }}\openclaw-payload' `
