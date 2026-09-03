@@ -9,7 +9,7 @@ public static class ClawCtlConsole
         WriteUsage(output);
         output.WriteLine();
         output.WriteLine("Commands:");
-        output.WriteLine("  prepare   Prepare the packaged OpenClaw payload.");
+        output.WriteLine("  setup   Set up the packaged OpenClaw payload.");
         output.WriteLine();
         WriteNodePrerequisite(output);
         output.WriteLine();
@@ -17,7 +17,7 @@ public static class ClawCtlConsole
     }
 
     public static void WriteUsage(TextWriter output) =>
-        output.WriteLine("Usage: clawctl prepare");
+        output.WriteLine("Usage: clawctl setup");
 
     public static void WriteNodePrerequisite(TextWriter output)
     {

@@ -26,7 +26,7 @@ public sealed class ProgramTests : IDisposable
                     }));
 
         Assert.False(nodeResolutionAttempted);
-        Assert.Contains("clawctl prepare", exception.Message);
+        Assert.Contains("clawctl setup", exception.Message);
     }
 
     private async Task<HostOptions> CreateUnpreparedOptionsAsync()

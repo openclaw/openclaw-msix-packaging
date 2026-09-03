@@ -74,7 +74,7 @@ public sealed class PreparedPayloadResolverTests : IDisposable
             exception.Message,
             StringComparison.Ordinal);
         Assert.Contains(
-            "clawctl prepare",
+            "clawctl setup",
             exception.Message,
             StringComparison.Ordinal);
     }
@@ -104,7 +104,7 @@ public sealed class PreparedPayloadResolverTests : IDisposable
             exception.Message,
             StringComparison.Ordinal);
         Assert.Contains(
-            "clawctl prepare",
+            "clawctl setup",
             exception.Message,
             StringComparison.Ordinal);
     }

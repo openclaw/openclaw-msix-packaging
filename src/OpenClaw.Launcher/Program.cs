@@ -159,7 +159,7 @@ internal static class Program
                     Assembly.GetExecutingAssembly().GetName().Version?.ToString() ??
                     "unknown");
                 return 0;
-            case ClawCtlCommand.Prepare:
+            case ClawCtlCommand.Setup:
             {
                 NodeRuntime nodeRuntime = await NodeRuntimeResolver.ResolveAsync(
                     CancellationToken.None);

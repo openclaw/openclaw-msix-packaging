@@ -12,7 +12,8 @@ public sealed class ClawCtlConsoleTests : IDisposable
         ClawCtlConsole.WriteHelp(output);
 
         string help = output.ToString();
-        Assert.Contains("prepare", help, StringComparison.Ordinal);
+        Assert.Contains("setup", help, StringComparison.Ordinal);
+        Assert.DoesNotContain("prepare", help, StringComparison.Ordinal);
         Assert.DoesNotContain("verify", help, StringComparison.Ordinal);
         Assert.DoesNotContain("repair", help, StringComparison.Ordinal);
         Assert.Contains(

@@ -24,7 +24,7 @@ internal static class PreparedPayloadResolver
                 : "out of date for the installed package";
             throw new InvalidOperationException(
                 $"The packaged OpenClaw payload is {state}. " +
-                "Run `clawctl prepare`, then retry.");
+                "Run `clawctl setup`, then retry.");
         }
 
         return options.InstallDirectory;

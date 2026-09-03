@@ -7,7 +7,7 @@ public sealed class HostEntrypointResolverTests
         Assert.Equal(
             HostEntrypoint.Control,
             HostEntrypointResolver.Resolve(
-                "\"C:\\Users\\someone\\AppData\\Local\\Microsoft\\WindowsApps\\clawctl.exe\" prepare"));
+                "\"C:\\Users\\someone\\AppData\\Local\\Microsoft\\WindowsApps\\clawctl.exe\" setup"));
 
     [Fact]
     public void AgentAliasSelectsThePassthroughEntrypoint() =>
@@ -24,7 +24,7 @@ public sealed class HostEntrypointResolverTests
             HostEntrypointResolver.Resolve("launcher.exe"));
         Assert.Equal(
             HostEntrypoint.Agent,
-            HostEntrypointResolver.Resolve("\"C:\\x\\clawctl.exe prepare"));
+            HostEntrypointResolver.Resolve("\"C:\\x\\clawctl.exe setup"));
     }
 
     [Fact]

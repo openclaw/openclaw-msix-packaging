@@ -32,7 +32,7 @@ version and executable architecture. It never downloads, installs, or services
 Node.js.
 
 The prepared payload must already be current. If it is missing or stale,
-`openclaw` exits with an instruction to run `clawctl prepare`; it does not
+`openclaw` exits with an instruction to run `clawctl setup`; it does not
 extract, verify, repair, or otherwise change package state.
 
 This manual preparation contract is intentional and maintainer-approved. On a
@@ -42,7 +42,7 @@ verification marker no longer matches and `openclaw` reports that the prepared
 payload is out of date. In both cases, the user runs:
 
 ```powershell
-clawctl prepare
+clawctl setup
 ```
 
 These readiness checks and actionable guidance are the only package-specific
@@ -70,13 +70,13 @@ cannot perform itself:
 
 | Command | Behavior |
 |---|---|
-| `clawctl prepare` | Verify the packaged archive and prepare it when missing or outdated. |
+| `clawctl setup` | Verify the packaged archive and prepare it when missing or outdated. |
 
 Bare `clawctl` and `clawctl --help` print help without changing state.
 Commands such as `setup`, `doctor`, `gateway`, and `uninstall` belong to the
 OpenClaw CLI and must be invoked through `openclaw`.
 
-`prepare` requires a compatible device-installed Node.js runtime. Missing,
+`setup` requires a compatible device-installed Node.js runtime. Missing,
 outdated, malformed, or architecture-incompatible runtimes produce an
 actionable error rather than a later process-launch failure.
 
@@ -86,12 +86,12 @@ verification succeed. The previous payload is restored if promotion fails.
 Preparation refuses to replace files while a packaged OpenClaw process is using
 the prepared payload.
 
-Install the current Node.js LTS release, open a new terminal, then prepare the
+Install the current Node.js LTS release, open a new terminal, then set up the
 payload once before using `openclaw`:
 
 ```powershell
 winget install --id OpenJS.NodeJS.LTS --exact --source winget
-clawctl prepare
+clawctl setup
 openclaw
 ```
 
@@ -173,7 +173,7 @@ be removed manually after OpenClaw is stopped.
 
 ## Integrity and isolation boundary
 
-`clawctl prepare` verifies the immutable payload archive shipped in the MSIX
+`clawctl setup` verifies the immutable payload archive shipped in the MSIX
 before extracting it. Normal `openclaw` launches compare the packaged payload
 hash with the prepared marker and confirm only that the OpenClaw entry point
 exists. They do not inspect, hash, allowlist, or reject other files in the

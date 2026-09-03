@@ -4,7 +4,7 @@ public enum ClawCtlCommand
 {
     Help,
     Version,
-    Prepare
+    Setup
 }
 
 public sealed record ClawCtlCommandParseResult(
@@ -25,9 +25,9 @@ public static class ClawCtlCommandParser
             return new ClawCtlCommandParseResult(ClawCtlCommand.Version);
         }
 
-        if (IsSingle(args, "prepare"))
+        if (IsSingle(args, "setup"))
         {
-            return new ClawCtlCommandParseResult(ClawCtlCommand.Prepare);
+            return new ClawCtlCommandParseResult(ClawCtlCommand.Setup);
         }
 
         return new ClawCtlCommandParseResult(
