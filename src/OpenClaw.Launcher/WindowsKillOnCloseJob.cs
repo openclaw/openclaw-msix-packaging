@@ -137,6 +137,7 @@ internal sealed class WindowsKillOnCloseJob : IDisposable
 
                 Process process = Process.GetProcessById(
                     unchecked((int)processInformation.ProcessId));
+                _ = process.SafeHandle;
                 if (ResumeThread(processInformation.Thread) == uint.MaxValue)
                 {
                     int error = Marshal.GetLastWin32Error();
