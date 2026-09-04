@@ -1,12 +1,14 @@
-# OpenClaw Gateway MSIX
+# OpenClaw Windows MSIX
 
 This repository builds a Windows MSIX package containing:
 
-- a .NET 10 NativeAOT launcher exposed as the `openclaw` app execution
-  alias;
+- one .NET 10 NativeAOT launcher exposed through the `openclaw` and `clawctl`
+  app execution aliases;
 - a pinned, verified build of
-  [`openclaw/openclaw`](https://github.com/openclaw/openclaw);
-- the matching official Node.js runtime for x64 or ARM64.
+  [`openclaw/openclaw`](https://github.com/openclaw/openclaw).
+
+Node.js is a device prerequisite and is never downloaded or included in the
+MSIX.
 
 The package is independent from the
 [OpenClaw Windows Node and Companion](https://github.com/openclaw/openclaw-windows-node)
@@ -14,27 +16,95 @@ and uses a separate `OpenClaw.Gateway` package identity. Both packages use the
 OpenClaw Foundation publisher metadata established for OpenClaw's Windows
 packages.
 
-## Launcher behavior
+## Command model
 
-When preparation is required, the host extracts into a temporary directory,
-moves any existing prepared payload aside, and promotes the new payload only
-after extraction and verification succeed. The previous payload is removed
-after successful promotion, preserving rollback if preparation fails.
+Both aliases activate the same packaged `openclaw.exe`. The launcher recovers
+the alias used to start it from the native process command line and selects one
+of two deliberately separate surfaces.
 
-An invocation with no arguments remains the temporary package preparation
-surface. On an existing installation it offers fast verification or full
-verification and repair. This explicit repair path remains until a separate
-management command can replace it.
+### `openclaw`
 
-Every invocation containing arguments is forwarded unchanged to the bundled
-OpenClaw CLI. The launcher does not reserve, consume, reject, or rewrite those
-commands or options, and it does not pause after the OpenClaw process exits.
+`openclaw` is a transparent launcher for the bundled OpenClaw CLI. It does not
+own package-management commands. Every argument, including an empty argument
+list, is forwarded unchanged to `node openclaw.mjs`, and the launcher returns
+the exact child exit code.
+
+Before launching, the host discovers `node.exe` on `PATH` and verifies its
+version and executable architecture. It never downloads, installs, or services
+Node.js.
+
+The prepared payload must already be current. If it is missing or stale,
+`openclaw` exits with an instruction to run `clawctl setup`; it does not
+extract, verify, repair, or otherwise change package state.
+
+This manual preparation contract is intentional and maintainer-approved. On a
+fresh installation, the first `openclaw` invocation reports that preparation is
+required. After an MSIX update changes the packaged payload, the existing
+verification marker no longer matches and `openclaw` reports that the prepared
+payload is out of date. In both cases, the user runs:
+
+```powershell
+clawctl setup
+```
+
+These readiness checks and actionable guidance are the only package-specific
+behavior in the `openclaw` entrypoint. Once the prepared payload and external
+Node.js prerequisite are valid, all arguments are passed through unchanged and
+the child process exit code is returned unchanged.
 
 Every OpenClaw child process runs with
-`OPENCLAW_SUPERVISOR_MODE=external` and `OPENCLAW_NO_AUTO_UPDATE=1`. This makes
-the MSIX package the authoritative owner of Gateway code updates without
-shadowing OpenClaw commands. OpenClaw itself is responsible for enforcing
-those environment flags.
+`OPENCLAW_SUPERVISOR_MODE=external`,
+`OPENCLAW_SERVICE_REPAIR_POLICY=external`, and
+`OPENCLAW_NO_AUTO_UPDATE=1`. These declare external lifecycle ownership,
+prevent doctor-owned service repair, and disable configured background
+auto-updates. The pinned OpenClaw `v2026.8.2` release honors external supervisor
+mode by refusing native service mutation and OpenClaw self-update with guidance
+to use the external supervisor's workflow. This behavior belongs to upstream
+OpenClaw; the launcher does not reserve, reject, or rewrite upstream command
+arguments.
+OpenClaw inherits the terminal's working directory; the launcher does not make
+the prepared application directory the workspace.
+
+### `clawctl`
+
+`clawctl` owns only the package preparation work that the bundled OpenClaw CLI
+cannot perform itself:
+
+| Command | Behavior |
+|---|---|
+| `clawctl setup` | Verify the packaged archive and prepare it when missing or outdated. |
+
+Bare `clawctl` and `clawctl --help` print help without changing state.
+Commands such as `setup`, `doctor`, `gateway`, and `uninstall` belong to the
+OpenClaw CLI and must be invoked through `openclaw`.
+
+`setup` requires a compatible device-installed Node.js runtime. Missing,
+outdated, malformed, or architecture-incompatible runtimes produce an
+actionable error rather than a later process-launch failure.
+
+Preparation extracts into a temporary directory, moves any existing prepared
+payload aside, and promotes the new payload only after extraction and
+verification succeed. The previous payload is restored if promotion fails.
+Preparation refuses to replace files while a packaged OpenClaw process is using
+the prepared payload.
+
+The launcher places Node.js in a Windows job configured with
+`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`. The launcher remains alive while Node.js
+runs; if the launcher exits or is terminated, Windows terminates Node.js and
+its child processes before releasing the payload lease.
+
+Install the current Node.js LTS release, open a new terminal, then set up the
+payload once before using `openclaw`:
+
+```powershell
+winget install --id OpenJS.NodeJS.LTS --exact --source winget
+clawctl setup
+openclaw
+```
+
+The packaged OpenClaw revision accepts Node.js
+`>=22.22.3 <23 || >=24.15.0 <25 || >=25.9.0`. The launcher keeps this
+requirement in one shared validator used by `clawctl` and `openclaw`.
 
 ## Selecting the OpenClaw revision
 
@@ -71,9 +141,10 @@ dotnet test .\OpenClaw.Gateway.MSIX.slnx `
 
 `scripts\Build-Payload.ps1` turns an OpenClaw npm package into an
 architecture-specific payload. `scripts\Build-MSIX.ps1` verifies that payload,
-downloads and verifies the official Node.js runtime, then creates an unsigned
-NativeAOT MSIX. `scripts\Build-LocalMSIX.ps1` can reuse a successful workflow
-payload or a local payload directory.
+rejects any packaged Node.js executable or runtime archive, then creates an
+unsigned NativeAOT MSIX. `scripts\Build-LocalMSIX.ps1` can reuse a successful
+workflow payload or a local payload directory. The Node.js used by the payload
+build jobs is build infrastructure only and is not copied into the MSIX.
 
 Normal pull-request and push workflows publish unsigned packages for
 validation. Manual runs support three signing modes:
@@ -96,9 +167,9 @@ key is stored in the repository.
 
 | Data | Default path |
 |---|---|
-| Prepared gateway files | `%USERPROFILE%\.openclaw-msix\app` |
+| Prepared OpenClaw application files | `%USERPROFILE%\.openclaw-msix\app` |
 | OpenClaw configuration and user state | `%USERPROFILE%\.openclaw` |
-| Launcher diagnostics | `%LOCALAPPDATA%\Packages\<package-family>\LocalState\OpenClawGatewayMSIX\Logs\openclaw.log` |
+| Launcher and package-management diagnostics | `%LOCALAPPDATA%\Packages\<package-family>\LocalState\OpenClawGatewayMSIX\Logs\openclaw.log` |
 
 The prepared gateway and OpenClaw user state are outside the immutable MSIX
 installation directory. Updating or removing the MSIX does not automatically
@@ -109,10 +180,12 @@ be removed manually after OpenClaw is stopped.
 
 ## Integrity and isolation boundary
 
-Normal launches verify the immutable payload archive shipped in the MSIX, then
-use the prepared payload marker to avoid re-hashing every extracted file.
-Re-hashing the complete prepared payload on every launch was intentionally
-rejected because it substantially delayed OpenClaw startup.
+`clawctl setup` verifies the immutable payload archive shipped in the MSIX
+before extracting it. Normal `openclaw` launches compare the packaged payload
+hash with the prepared marker and confirm only that the OpenClaw entry point
+exists. They do not inspect, hash, allowlist, or reject other files in the
+prepared directory. A matching payload is reused as-is, including user-created
+or modified files.
 
 The prepared gateway directory is writable by the current user and is treated
 as user-owned application state, not as a tamper-resistant trust boundary.

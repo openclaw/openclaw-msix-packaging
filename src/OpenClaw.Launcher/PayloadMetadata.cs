@@ -1,7 +1,8 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Runtime.InteropServices;
 
-namespace OpenClaw.Gateway.Launcher;
+namespace OpenClaw.Launcher;
 
 public sealed record PayloadMetadata(
     [property: JsonPropertyName("repository")] string Repository,
@@ -61,6 +62,36 @@ public sealed record PayloadMetadata(
             Path.GetFileName(Archive) != Archive)
         {
             throw new InvalidDataException("Payload archive name is invalid.");
+        }
+    }
+
+    internal static void ValidateForCurrentProcess(
+        PayloadMetadata metadata,
+        string payloadPath)
+    {
+        string processArchitecture = RuntimeInformation.ProcessArchitecture switch
+        {
+            System.Runtime.InteropServices.Architecture.X64 => "x64",
+            System.Runtime.InteropServices.Architecture.Arm64 => "arm64",
+            _ => throw new PlatformNotSupportedException(
+                $"Unsupported process architecture: {RuntimeInformation.ProcessArchitecture}.")
+        };
+        if (!string.Equals(
+            metadata.Architecture,
+            processArchitecture,
+            StringComparison.Ordinal))
+        {
+            throw new InvalidDataException(
+                "Payload architecture does not match the host process.");
+        }
+
+        if (!string.Equals(
+            metadata.Archive,
+            Path.GetFileName(payloadPath),
+            StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidDataException(
+                "Payload file name does not match its metadata.");
         }
     }
 }

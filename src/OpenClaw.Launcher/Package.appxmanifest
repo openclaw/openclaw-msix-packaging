@@ -47,6 +47,7 @@
           EntryPoint="Windows.FullTrustApplication">
           <uap5:AppExecutionAlias>
             <uap5:ExecutionAlias Alias="openclaw.exe" />
+            <uap5:ExecutionAlias Alias="clawctl.exe" />
           </uap5:AppExecutionAlias>
         </uap5:Extension>
       </Extensions>

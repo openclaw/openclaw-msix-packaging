@@ -1,4 +1,4 @@
-namespace OpenClaw.Gateway.Launcher.Tests;
+namespace OpenClaw.Launcher.Tests;
 
 public sealed class GatewayLauncherTests : IDisposable
 {
@@ -21,10 +21,13 @@ public sealed class GatewayLauncherTests : IDisposable
 
         Assert.False(startInfo.UseShellExecute);
         Assert.False(startInfo.RedirectStandardError);
-        Assert.Equal(_payloadDirectory, startInfo.WorkingDirectory);
+        Assert.Empty(startInfo.WorkingDirectory);
         Assert.Equal(
             "external",
             startInfo.Environment["OPENCLAW_SUPERVISOR_MODE"]);
+        Assert.Equal(
+            "external",
+            startInfo.Environment["OPENCLAW_SERVICE_REPAIR_POLICY"]);
         Assert.Equal("1", startInfo.Environment["OPENCLAW_NO_AUTO_UPDATE"]);
         Assert.Equal(
             [Path.Combine(_payloadDirectory, "openclaw.mjs")],
@@ -42,9 +45,13 @@ public sealed class GatewayLauncherTests : IDisposable
             arguments);
 
         Assert.False(startInfo.RedirectStandardError);
+        Assert.Empty(startInfo.WorkingDirectory);
         Assert.Equal(
             "external",
             startInfo.Environment["OPENCLAW_SUPERVISOR_MODE"]);
+        Assert.Equal(
+            "external",
+            startInfo.Environment["OPENCLAW_SERVICE_REPAIR_POLICY"]);
         Assert.Equal("1", startInfo.Environment["OPENCLAW_NO_AUTO_UPDATE"]);
         Assert.Equal(
             [Path.Combine(_payloadDirectory, "openclaw.mjs"), .. arguments],

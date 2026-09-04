@@ -1,4 +1,4 @@
-namespace OpenClaw.Gateway.Launcher.Tests;
+namespace OpenClaw.Launcher.Tests;
 
 public sealed class HostOptionsTests
 {

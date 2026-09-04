@@ -10,7 +10,7 @@ on:
       openclaw_ref:
         description: openclaw/openclaw tag, branch, or commit to package
         required: true
-        default: 0790d9f593ad30c940ed93b5872a8cf6d6f3cf8c
+        default: 0965053fe6b9341776df147a6934b7485c60b5ca
         type: string
       signing_mode:
         description: Package signing mode
@@ -28,7 +28,7 @@ permissions:
 env:
   NODE_VERSION: 24.16.0
   PNPM_VERSION: 11.15.1
-  OPENCLAW_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.openclaw_ref || '0790d9f593ad30c940ed93b5872a8cf6d6f3cf8c' }}
+  OPENCLAW_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.openclaw_ref || '0965053fe6b9341776df147a6934b7485c60b5ca' }}
   PACKAGING_ROOT: .
 
 jobs:
@@ -61,6 +61,11 @@ jobs:
         shell: pwsh
         run: >
           .\scripts\Test-SigningInputs.Tests.ps1
+
+      - name: Test workflow package version
+        shell: pwsh
+        run: >
+          .\scripts\Test-WorkflowPackageVersion.Tests.ps1
 
   build-package:
     name: Build OpenClaw npm package
@@ -214,7 +219,7 @@ jobs:
         shell: pwsh
         run: |
           dotnet restore `
-            .\src\OpenClaw.Gateway.Launcher\OpenClaw.Gateway.Launcher.csproj `
+            .\src\OpenClaw.Launcher\OpenClaw.Launcher.csproj `
             --runtime 'win-${{ matrix.architecture }}' `
             -p:PublishAot=true `
             -p:IncludePackagingContent=true `
@@ -223,14 +228,13 @@ jobs:
       - name: Compose unsigned MSIX
         shell: pwsh
         run: |
-          $buildComponent = [int64]::Parse('${{ github.run_number }}') % 65536
-          $attemptComponent = [int64]::Parse('${{ github.run_attempt }}') % 65536
-          $packageVersion = "0.1.$buildComponent.$attemptComponent"
+          $packageVersion = .\scripts\Get-WorkflowPackageVersion.ps1 `
+            -RunNumber '${{ github.run_number }}' `
+            -RunAttempt '${{ github.run_attempt }}'
 
           .\scripts\Build-MSIX.ps1 `
             -PayloadDirectory '${{ runner.temp }}\openclaw-payload' `
             -Architecture '${{ matrix.architecture }}' `
-            -NodeVersion '${{ env.NODE_VERSION }}' `
             -PackageVersion $packageVersion `
             -SourceCommit '${{ github.sha }}' `
             -OutputDirectory '${{ runner.temp }}\openclaw-msix'

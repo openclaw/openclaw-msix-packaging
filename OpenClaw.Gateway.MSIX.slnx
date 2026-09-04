@@ -1,8 +1,8 @@
 <Solution>
   <Folder Name="/src/">
-    <Project Path="src/OpenClaw.Gateway.Launcher/OpenClaw.Gateway.Launcher.csproj" />
+    <Project Path="src/OpenClaw.Launcher/OpenClaw.Launcher.csproj" />
   </Folder>
   <Folder Name="/tests/">
-    <Project Path="tests/OpenClaw.Gateway.Launcher.Tests/OpenClaw.Gateway.Launcher.Tests.csproj" />
+    <Project Path="tests/OpenClaw.Launcher.Tests/OpenClaw.Launcher.Tests.csproj" />
   </Folder>
 </Solution>

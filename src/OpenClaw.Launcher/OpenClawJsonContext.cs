@@ -1,7 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace OpenClaw.Gateway.Launcher;
+namespace OpenClaw.Launcher;
 
 [JsonSerializable(typeof(PayloadMetadata))]
-[JsonSerializable(typeof(PayloadInventory))]
 internal sealed partial class OpenClawJsonContext : JsonSerializerContext;
