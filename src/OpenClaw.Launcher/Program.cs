@@ -113,11 +113,7 @@ internal static class Program
         Action<string> log,
         Func<CancellationToken, Task<NodeRuntime>>? resolveNode = null)
     {
-        using FileStream runtimeLease = PayloadRuntimeLock.AcquireForLaunch(
-            options.InstallDirectory);
-        using PayloadProcessRegistration processRegistration =
-            PayloadProcessRegistry.Reserve(options.InstallDirectory);
-        string payloadDirectory = await PreparedPayloadResolver.ResolveAsync(
+        await PreparedPayloadResolver.ResolveAsync(
             options,
             CancellationToken.None);
         NodeRuntime nodeRuntime = await (
@@ -126,12 +122,16 @@ internal static class Program
         log(
             $"Using Node.js {nodeRuntime.Version} from " +
             $"{nodeRuntime.ExecutablePath}.");
+        using FileStream runtimeLease = PayloadRuntimeLock.AcquireForLaunch(
+            options.InstallDirectory);
+        string payloadDirectory = await PreparedPayloadResolver.ResolveAsync(
+            options,
+            CancellationToken.None);
         return await GatewayLauncher.RunAsync(
             nodeRuntime.ExecutablePath,
             payloadDirectory,
             options.OpenClawArguments,
             CancellationToken.None,
-            processRegistration,
             log);
     }
 
@@ -172,12 +172,7 @@ internal static class Program
 
                 var stager = new PayloadStager(
                     options.InstallDirectory,
-                    ReportProgress,
-                    (payloadDirectory, cancellationToken) => GatewayStopper.StopAsync(
-                        nodeRuntime.ExecutablePath,
-                        payloadDirectory,
-                        ReportProgress,
-                        cancellationToken));
+                    ReportProgress);
                 StagedPayload payload = await stager.StageAsync(
                     options.PayloadPath,
                     options.MetadataPath,

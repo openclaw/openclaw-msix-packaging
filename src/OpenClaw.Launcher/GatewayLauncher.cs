@@ -4,37 +4,21 @@ namespace OpenClaw.Launcher;
 
 public static class GatewayLauncher
 {
-    internal static async Task<int> RunAsync(
+    public static async Task<int> RunAsync(
         string nodePath,
         string payloadDirectory,
         IReadOnlyList<string> openClawArguments,
         CancellationToken cancellationToken,
-        PayloadProcessRegistration registration,
         Action<string>? log = null)
     {
-        ArgumentNullException.ThrowIfNull(registration);
-
         ProcessStartInfo startInfo = CreateStartInfo(
             nodePath,
             payloadDirectory,
             openClawArguments);
         log?.Invoke("Launching OpenClaw with forwarded command arguments.");
-        using Process process = Process.Start(startInfo) ??
-            throw new InvalidOperationException("Unable to start the OpenClaw process.");
+        using WindowsKillOnCloseJob job = WindowsKillOnCloseJob.Create();
+        using Process process = job.StartProcess(startInfo);
         log?.Invoke($"OpenClaw child process started with PID {process.Id}.");
-        try
-        {
-            registration.Attach(process);
-        }
-        catch
-        {
-            if (!process.HasExited)
-            {
-                process.Kill(entireProcessTree: true);
-                process.WaitForExit();
-            }
-            throw;
-        }
 
         try
         {

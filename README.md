@@ -83,10 +83,13 @@ actionable error rather than a later process-launch failure.
 Preparation extracts into a temporary directory, moves any existing prepared
 payload aside, and promotes the new payload only after extraction and
 verification succeed. The previous payload is restored if promotion fails.
-Before replacing an outdated payload, preparation stops packaged OpenClaw
-gateway processes through the bundled `gateway stop` command and stops any
-launcher processes still recorded as using it. The runtime lock then prevents a
-new launch from racing the replacement.
+Preparation refuses to replace files while a packaged OpenClaw process is using
+the prepared payload.
+
+The launcher places Node.js in a Windows job configured with
+`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`. The launcher remains alive while Node.js
+runs; if the launcher exits or is terminated, Windows terminates Node.js and
+its child processes before releasing the payload lease.
 
 Install the current Node.js LTS release, open a new terminal, then set up the
 payload once before using `openclaw`:
