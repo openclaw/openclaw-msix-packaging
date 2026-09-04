@@ -83,8 +83,10 @@ actionable error rather than a later process-launch failure.
 Preparation extracts into a temporary directory, moves any existing prepared
 payload aside, and promotes the new payload only after extraction and
 verification succeed. The previous payload is restored if promotion fails.
-Preparation refuses to replace files while a packaged OpenClaw process is using
-the prepared payload.
+Before replacing an outdated payload, preparation stops packaged OpenClaw
+gateway processes through the bundled `gateway stop` command and stops any
+launcher processes still recorded as using it. The runtime lock then prevents a
+new launch from racing the replacement.
 
 Install the current Node.js LTS release, open a new terminal, then set up the
 payload once before using `openclaw`:

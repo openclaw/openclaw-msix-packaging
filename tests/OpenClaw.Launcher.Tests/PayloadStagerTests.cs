@@ -1,4 +1,5 @@
 using System.Formats.Tar;
+using System.Diagnostics;
 using System.IO.Compression;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
@@ -56,6 +57,166 @@ public sealed class PayloadStagerTests : IDisposable
                     message,
                     "Released the installation lock.",
                     StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public async Task StageAsyncStopsTrackedProcessBeforeReplacingPayload()
+    {
+        PackageFixture firstFixture = await CreatePackageAsync(
+        [
+            new PaxTarEntry(TarEntryType.RegularFile, "openclaw.mjs")
+            {
+                DataStream = TextStream("first")
+            }
+        ]);
+        PackageFixture secondFixture = await CreatePackageAsync(
+        [
+            new PaxTarEntry(TarEntryType.RegularFile, "openclaw.mjs")
+            {
+                DataStream = TextStream("second")
+            }
+        ]);
+        string installDirectory = Path.Combine(_testDirectory, "app");
+        var stager = new PayloadStager(installDirectory);
+        await stager.StageAsync(
+            firstFixture.ArchivePath,
+            firstFixture.MetadataPath,
+            CancellationToken.None);
+        using Process process = TestProcess.StartLongRunning();
+        using PayloadProcessRegistration registration =
+            PayloadProcessRegistry.Reserve(installDirectory);
+        registration.Attach(process);
+
+        await stager.StageAsync(
+            secondFixture.ArchivePath,
+            secondFixture.MetadataPath,
+            CancellationToken.None);
+
+        process.Refresh();
+        Assert.True(process.HasExited);
+        Assert.Equal(
+            "second",
+            await File.ReadAllTextAsync(
+                Path.Combine(installDirectory, "openclaw.mjs")));
+    }
+
+    [Fact]
+    public async Task StageAsyncStopsGatewayAroundExclusiveUpgradeLock()
+    {
+        PackageFixture firstFixture = await CreatePackageAsync(
+        [
+            new PaxTarEntry(TarEntryType.RegularFile, "openclaw.mjs")
+            {
+                DataStream = TextStream("first")
+            }
+        ]);
+        PackageFixture secondFixture = await CreatePackageAsync(
+        [
+            new PaxTarEntry(TarEntryType.RegularFile, "openclaw.mjs")
+            {
+                DataStream = TextStream("second")
+            }
+        ]);
+        string installDirectory = Path.Combine(_testDirectory, "app");
+        int stopCount = 0;
+        var stager = new PayloadStager(
+            installDirectory,
+            stopPayloadUsers: (_, _) =>
+            {
+                stopCount++;
+                return Task.CompletedTask;
+            });
+        await stager.StageAsync(
+            firstFixture.ArchivePath,
+            firstFixture.MetadataPath,
+            CancellationToken.None);
+        stopCount = 0;
+
+        await stager.StageAsync(
+            secondFixture.ArchivePath,
+            secondFixture.MetadataPath,
+            CancellationToken.None);
+
+        Assert.Equal(2, stopCount);
+    }
+
+    [Fact]
+    public async Task StageAsyncDoesNotStopTrackedProcessWhenPayloadIsCurrent()
+    {
+        PackageFixture fixture = await CreatePackageAsync(
+        [
+            new PaxTarEntry(TarEntryType.RegularFile, "openclaw.mjs")
+            {
+                DataStream = TextStream("current")
+            }
+        ]);
+        string installDirectory = Path.Combine(_testDirectory, "app");
+        int stopCount = 0;
+        var stager = new PayloadStager(
+            installDirectory,
+            stopPayloadUsers: (_, _) =>
+            {
+                stopCount++;
+                return Task.CompletedTask;
+            });
+        await stager.StageAsync(
+            fixture.ArchivePath,
+            fixture.MetadataPath,
+            CancellationToken.None);
+        using Process process = TestProcess.StartLongRunning();
+        using PayloadProcessRegistration registration =
+            PayloadProcessRegistry.Reserve(installDirectory);
+        registration.Attach(process);
+
+        StagedPayload staged = await stager.StageAsync(
+            fixture.ArchivePath,
+            fixture.MetadataPath,
+            CancellationToken.None);
+
+        process.Refresh();
+        Assert.True(staged.Reused);
+        Assert.Equal(0, stopCount);
+        Assert.False(process.HasExited);
+        TestProcess.Stop(process);
+    }
+
+    [Fact]
+    public async Task StageAsyncRepairsMissingMarkerWithoutRunningGatewayStop()
+    {
+        PackageFixture fixture = await CreatePackageAsync(
+        [
+            new PaxTarEntry(TarEntryType.RegularFile, "openclaw.mjs")
+            {
+                DataStream = TextStream("repaired")
+            }
+        ]);
+        string installDirectory = Path.Combine(_testDirectory, "app");
+        int stopCount = 0;
+        var stager = new PayloadStager(
+            installDirectory,
+            stopPayloadUsers: (_, _) =>
+            {
+                stopCount++;
+                return Task.CompletedTask;
+            });
+        await stager.StageAsync(
+            fixture.ArchivePath,
+            fixture.MetadataPath,
+            CancellationToken.None);
+        File.Delete(Path.Combine(
+            installDirectory,
+            PayloadStager.VerificationMarkerFileName));
+        File.Delete(Path.Combine(installDirectory, "openclaw.mjs"));
+
+        await stager.StageAsync(
+            fixture.ArchivePath,
+            fixture.MetadataPath,
+            CancellationToken.None);
+
+        Assert.Equal(0, stopCount);
+        Assert.True(File.Exists(Path.Combine(
+            installDirectory,
+            "openclaw.mjs")));
     }
 
     [Fact]
@@ -304,7 +465,14 @@ public sealed class PayloadStagerTests : IDisposable
         string installDirectory = Path.Combine(_testDirectory, "app");
         string backupDirectory = Path.Combine(_testDirectory, ".app.previous");
         string stagingDirectory = Path.Combine(_testDirectory, ".app.staging");
-        var stager = new PayloadStager(installDirectory);
+        string? stoppedPayloadDirectory = null;
+        var stager = new PayloadStager(
+            installDirectory,
+            stopPayloadUsers: (payloadDirectory, _) =>
+            {
+                stoppedPayloadDirectory = payloadDirectory;
+                return Task.CompletedTask;
+            });
         StagedPayload staged = await stager.StageAsync(
             fixture.ArchivePath,
             fixture.MetadataPath,
@@ -327,6 +495,7 @@ public sealed class PayloadStagerTests : IDisposable
         Assert.True(File.Exists(Path.Combine(installDirectory, "openclaw.mjs")));
         Assert.False(Directory.Exists(backupDirectory));
         Assert.False(Directory.Exists(stagingDirectory));
+        Assert.Equal(backupDirectory, stoppedPayloadDirectory);
     }
 
     [Fact]

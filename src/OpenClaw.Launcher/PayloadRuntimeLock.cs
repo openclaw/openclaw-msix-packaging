@@ -38,6 +38,39 @@ internal static class PayloadRuntimeLock
         }
     }
 
+    public static async Task<FileStream> AcquireForMutationAsync(
+        string installDirectory,
+        CancellationToken cancellationToken)
+    {
+        var timeout = TimeSpan.FromSeconds(5);
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        IOException? lastException = null;
+
+        while (stopwatch.Elapsed < timeout)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                return Open(
+                    installDirectory,
+                    FileAccess.ReadWrite,
+                    FileShare.None);
+            }
+            catch (IOException exception)
+            {
+                lastException = exception;
+                await Task.Delay(
+                    TimeSpan.FromMilliseconds(100),
+                    cancellationToken);
+            }
+        }
+
+        throw new InvalidOperationException(
+            "OpenClaw is currently using the prepared payload. " +
+            "Stop the packaged OpenClaw process before preparing it.",
+            lastException);
+    }
+
     private static FileStream Open(
         string installDirectory,
         FileAccess access,

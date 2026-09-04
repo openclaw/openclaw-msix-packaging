@@ -14,23 +14,31 @@ public sealed class PayloadStager
     private readonly string _installDirectory;
     private readonly Action<string> _log;
     private readonly Action<string> _cleanupDirectory;
+    private readonly Func<string, CancellationToken, Task> _stopPayloadUsers;
 
     public PayloadStager(
         string installDirectory,
-        Action<string>? log = null)
-        : this(installDirectory, log, DeleteDirectory)
+        Action<string>? log = null,
+        Func<string, CancellationToken, Task>? stopPayloadUsers = null)
+        : this(
+            installDirectory,
+            log,
+            DeleteDirectory,
+            stopPayloadUsers)
     {
     }
 
     internal PayloadStager(
         string installDirectory,
         Action<string>? log,
-        Action<string> cleanupDirectory)
+        Action<string> cleanupDirectory,
+        Func<string, CancellationToken, Task>? stopPayloadUsers = null)
     {
         ArgumentNullException.ThrowIfNull(cleanupDirectory);
         _installDirectory = Path.GetFullPath(installDirectory);
         _log = log ?? (_ => { });
         _cleanupDirectory = cleanupDirectory;
+        _stopPayloadUsers = stopPayloadUsers ?? ((_, _) => Task.CompletedTask);
     }
 
     public async Task<StagedPayload> StageAsync(
@@ -79,13 +87,12 @@ public sealed class PayloadStager
 
         try
         {
-            _log("Checking for an interrupted payload update.");
-            RecoverInterruptedPromotion(
-                _installDirectory,
-                temporaryDirectory,
-                backupDirectory);
-
-            if (Directory.Exists(_installDirectory))
+            bool stopGatewayForUpgrade = false;
+            bool recoveryRequired =
+                Directory.Exists(temporaryDirectory) ||
+                Directory.Exists(backupDirectory) ||
+                !Directory.Exists(_installDirectory);
+            if (!recoveryRequired)
             {
                 string? verifiedPayloadHash = await ReadVerificationMarkerAsync(
                     _installDirectory,
@@ -103,12 +110,75 @@ public sealed class PayloadStager
                         Reused: true);
                 }
 
+                stopGatewayForUpgrade = verifiedPayloadHash is not null;
                 _log(
                     "The packaged payload changed; replacing the installed payload.");
             }
 
+            if (stopGatewayForUpgrade)
+            {
+                await _stopPayloadUsers(
+                    _installDirectory,
+                    cancellationToken);
+            }
+
+            await PayloadProcessRegistry.StopTrackedProcessesAsync(
+                _installDirectory,
+                _log,
+                cancellationToken);
             using FileStream runtimeLock =
-                PayloadRuntimeLock.AcquireForMutation(_installDirectory);
+                await PayloadRuntimeLock.AcquireForMutationAsync(
+                    _installDirectory,
+                    cancellationToken);
+
+            // A launch that began before the exclusive lock may have started a
+            // detached gateway or written a process record after the first
+            // scan. No new launch can begin with this lock held, so repeat both
+            // stop mechanisms before any payload path is moved.
+            await PayloadProcessRegistry.StopTrackedProcessesAsync(
+                _installDirectory,
+                _log,
+                cancellationToken);
+
+            string? gatewayStopDirectory = stopGatewayForUpgrade
+                ? _installDirectory
+                : await FindRecoveryPayloadAsync(
+                    _installDirectory,
+                    backupDirectory,
+                    cancellationToken);
+            if (gatewayStopDirectory is not null)
+            {
+                await _stopPayloadUsers(
+                    gatewayStopDirectory,
+                    cancellationToken);
+            }
+
+            _log("Checking for an interrupted payload update.");
+            RecoverInterruptedPromotion(
+                _installDirectory,
+                temporaryDirectory,
+                backupDirectory);
+
+            if (Directory.Exists(_installDirectory))
+            {
+                string? recoveredPayloadHash = await ReadVerificationMarkerAsync(
+                    _installDirectory,
+                    cancellationToken);
+                if (string.Equals(
+                    recoveredPayloadHash,
+                    actualHash,
+                    StringComparison.OrdinalIgnoreCase))
+                {
+                    _log(
+                        "The recovered payload marker matches; preserving user changes.");
+                    return new StagedPayload(
+                        _installDirectory,
+                        actualHash,
+                        Reused: true);
+                }
+
+            }
+
             _log("Extracting the verified payload. First launch can take several minutes.");
             Directory.CreateDirectory(temporaryDirectory);
             bool promoted = false;
@@ -186,6 +256,25 @@ public sealed class PayloadStager
         {
             DeleteDirectory(backupDirectory);
         }
+    }
+
+    private static async Task<string?> FindRecoveryPayloadAsync(
+        string installDirectory,
+        string backupDirectory,
+        CancellationToken cancellationToken)
+    {
+        if (await ReadVerificationMarkerAsync(
+                installDirectory,
+                cancellationToken) is not null)
+        {
+            return installDirectory;
+        }
+
+        return await ReadVerificationMarkerAsync(
+                backupDirectory,
+                cancellationToken) is not null
+            ? backupDirectory
+            : null;
     }
 
     private static async Task<int> ReadPayloadAsync(
